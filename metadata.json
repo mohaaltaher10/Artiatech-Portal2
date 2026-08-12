@@ -1,0 +1,6 @@
+{
+  "name": "Artiatech Portal",
+  "description": "نظام إدارة مالية وتشغيلية شامل لاستوديو أرتياتك للأعمال الفنية والتقنية",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
