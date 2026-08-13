@@ -13,23 +13,35 @@ export const isNotificationsEnabled = (): boolean => {
   if (!isNotificationSupported()) return false;
   if (Notification.permission !== 'granted') return false;
   const pref = localStorage.getItem('artiatech_notifications_enabled');
-  return pref === 'true';
+  return pref !== 'false';
 };
 
 export const requestNotificationPermission = async (): Promise<boolean> => {
   if (!isNotificationSupported()) return false;
 
   try {
-    const permission = await Notification.requestPermission();
+    let permission: NotificationPermission;
+    const req = Notification.requestPermission();
+    if (req && typeof req.then === 'function') {
+      permission = await req;
+    } else {
+      permission = await new Promise((resolve) => {
+        Notification.requestPermission(resolve);
+      });
+    }
+
     if (permission === 'granted') {
       localStorage.setItem('artiatech_notifications_enabled', 'true');
       
-      // Send a test confirmation notification
-      sendAppNotification('تم تفعيل الإشعارات بنجاح 🔔', {
-        body: 'ستصلك التنبيهات الفورية للإعلانات والتوزيعات والطلبات على هذا الجهاز.',
-        icon: '/icon.png',
-        tag: 'welcome-notification'
-      });
+      // Send a test confirmation notification immediately
+      setTimeout(() => {
+        sendAppNotification('تم تفعيل الإشعارات بنجاح 🔔', {
+          body: 'ستصلك التنبيهات الفورية للإعلانات والتوزيعات والطلبات على هذا الجهاز.',
+          icon: '/icon.png',
+          tag: 'welcome-notification'
+        });
+      }, 300);
+
       return true;
     } else {
       localStorage.setItem('artiatech_notifications_enabled', 'false');
@@ -43,6 +55,7 @@ export const requestNotificationPermission = async (): Promise<boolean> => {
 
 export const setNotificationsEnabled = (enabled: boolean): void => {
   if (enabled) {
+    localStorage.setItem('artiatech_notifications_enabled', 'true');
     requestNotificationPermission();
   } else {
     localStorage.setItem('artiatech_notifications_enabled', 'false');
@@ -50,27 +63,37 @@ export const setNotificationsEnabled = (enabled: boolean): void => {
 };
 
 export const sendAppNotification = (title: string, options?: NotificationOptions): void => {
-  if (!isNotificationsEnabled()) return;
+  if (!isNotificationSupported()) return;
+  if (Notification.permission !== 'granted') return;
+  if (localStorage.getItem('artiatech_notifications_enabled') === 'false') return;
 
   const defaultOptions: NotificationOptions = {
     icon: '/icon.png',
     badge: '/icon.png',
     dir: 'rtl',
     lang: 'ar',
+    tag: 'artiatech-notification',
     ...options
   };
 
   try {
-    if ('serviceWorker' in navigator) {
+    if ('serviceWorker' in navigator && navigator.serviceWorker) {
       navigator.serviceWorker.ready.then((reg) => {
-        reg.showNotification(title, defaultOptions);
+        if (reg && reg.showNotification) {
+          reg.showNotification(title, defaultOptions).catch(() => {
+            try { new Notification(title, defaultOptions); } catch (e) {}
+          });
+        } else {
+          try { new Notification(title, defaultOptions); } catch (e) {}
+        }
       }).catch(() => {
-        new Notification(title, defaultOptions);
+        try { new Notification(title, defaultOptions); } catch (e) {}
       });
     } else {
-      new Notification(title, defaultOptions);
+      try { new Notification(title, defaultOptions); } catch (e) {}
     }
   } catch (err) {
     console.warn('Notification send notice:', err);
   }
 };
+
