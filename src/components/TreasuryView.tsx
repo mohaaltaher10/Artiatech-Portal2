@@ -87,6 +87,7 @@ export const TreasuryView: React.FC<TreasuryViewProps> = ({ currentUser, showToa
   const [submitting, setSubmitting] = useState(false);
 
   // Modal Dialog States
+  const [deleteConfirmAsset, setDeleteConfirmAsset] = useState<{ id: string; name: string } | null>(null);
   const [addSourceTxId, setAddSourceTxId] = useState<string | null>(null);
   const [newSourceUrl, setNewSourceUrl] = useState('');
   const [showReportModal, setShowReportModal] = useState(false);
@@ -654,8 +655,13 @@ export const TreasuryView: React.FC<TreasuryViewProps> = ({ currentUser, showToa
   };
 
   // Delete Asset
-  const handleDeleteAsset = async (id: string, name: string) => {
-    if (!window.confirm(`هل أنت تأكد من حذف الأصل "${name}"؟`)) return;
+  const handleDeleteAsset = (id: string, name: string) => {
+    setDeleteConfirmAsset({ id, name });
+  };
+
+  const confirmDeleteAsset = async () => {
+    if (!deleteConfirmAsset) return;
+    const { id, name } = deleteConfirmAsset;
     try {
       await remove(ref(db, `assets/${id}`));
       await logActivity(
@@ -668,6 +674,8 @@ export const TreasuryView: React.FC<TreasuryViewProps> = ({ currentUser, showToa
       showToast('تم حذف الأصل بنجاح ✓', 'success');
     } catch (err) {
       showToast('حدث خطأ أثناء الحذف.', 'error');
+    } finally {
+      setDeleteConfirmAsset(null);
     }
   };
 
@@ -1732,6 +1740,35 @@ export const TreasuryView: React.FC<TreasuryViewProps> = ({ currentUser, showToa
                 className="px-5 py-2 bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs rounded-xl transition-colors cursor-pointer"
               >
                 إغلاق
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Delete Asset Confirm */}
+      {deleteConfirmAsset && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fadeIn">
+          <div className="bg-white rounded-2xl p-6 max-w-sm w-full space-y-4 text-center border border-slate-100 shadow-2xl">
+            <div className="w-12 h-12 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto">
+              <Trash2 className="w-6 h-6" />
+            </div>
+            <h3 className="text-base font-black text-slate-900">حذف الأصل</h3>
+            <p className="text-xs text-slate-600 font-bold leading-relaxed">
+              هل أنت تأكيد من رغبتك في حذف الأصل "{deleteConfirmAsset.name}"؟ لا يمكن التراجع عن هذه الخطوة.
+            </p>
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={confirmDeleteAsset}
+                className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 text-white font-bold text-xs rounded-xl transition-colors cursor-pointer shadow-sm"
+              >
+                تأكيد الحذف
+              </button>
+              <button
+                onClick={() => setDeleteConfirmAsset(null)}
+                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-colors cursor-pointer"
+              >
+                إلغاء
               </button>
             </div>
           </div>
