@@ -29,9 +29,20 @@ interface ProfileViewProps {
   showToast: (msg: string, type: 'success' | 'error') => void;
 }
 
+interface UnfreezeRequestItem {
+  id: string;
+  userId: string;
+  userName: string;
+  userEmail: string;
+  note: string;
+  requestedAt: string;
+  status: string;
+}
+
 export const ProfileView: React.FC<ProfileViewProps> = ({ currentUser, showToast }) => {
   const [slices, setSlices] = useState<DistributionFundSlice[]>([]);
   const [assignedBooklets, setAssignedBooklets] = useState<ProjectBooklet[]>([]);
+  const [unfreezeRequests, setUnfreezeRequests] = useState<UnfreezeRequestItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Form states for account update
@@ -41,7 +52,8 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ currentUser, showToast
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [updating, setUpdating] = useState(false);
-  const [freezeRequested, setFreezeRequested] = useState(false);
+  const [freezeRequested, setFreezeRequested] = useState(!!currentUser.freezeRequested);
+  const [showConfirmFreezeModal, setShowConfirmFreezeModal] = useState(false);
   const [repairing, setRepairing] = useState(false);
   const [repairReport, setRepairReport] = useState<RepairResult | null>(null);
   const [showConfirmRepairModal, setShowConfirmRepairModal] = useState(false);
@@ -90,11 +102,23 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ currentUser, showToast
       setLoading(false);
     });
 
+    // 3. Listen to unfreeze requests if admin
+    let unsubUnfreeze = () => {};
+    if (currentUser.role === 'admin') {
+      unsubUnfreeze = onValue(ref(db, 'unfreeze_requests'), (snapshot) => {
+        const val = snapshot.val();
+        const list: UnfreezeRequestItem[] = val ? Object.keys(val).map((k) => ({ id: k, ...val[k] })) : [];
+        list.sort((a, b) => new Date(b.requestedAt || 0).getTime() - new Date(a.requestedAt || 0).getTime());
+        setUnfreezeRequests(list);
+      }, (err) => console.warn('Unfreeze requests listener in profile:', err));
+    }
+
     return () => {
       unsubSlices();
       unsubBooklets();
+      unsubUnfreeze();
     };
-  }, [currentUser.id]);
+  }, [currentUser.id, currentUser.role]);
 
   // Filter slices where current user is a member
   const mySlicesData = slices
@@ -164,22 +188,23 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ currentUser, showToast
     }
   };
 
-  const handleFreezeRequest = async () => {
-    if (!window.confirm('هل أنت تأكد من تقديم طلب تجميد الحساب؟ سيتم مراسلة الأدمن.')) return;
-
+  const executeFreezeRequest = async () => {
+    setShowConfirmFreezeModal(false);
     try {
-      await logActivity(
-        currentUser.id,
-        currentUser.name,
-        currentUser.role,
-        'طلب تجميد',
-        `قدّم ${currentUser.name} طلباً لتجميد حسابه في البوابة`
-      );
+      await update(ref(db, `users/${currentUser.id}`), {
+        freezeRequested: true,
+        freezeRequestedAt: new Date().toISOString(),
+      });
+
       setFreezeRequested(true);
       showToast('تم تقديم طلب التجميد للأدمن بنجاح ✓', 'success');
     } catch (err: any) {
-      showToast('حدث خطأ. حاول مرة أخرى.', 'error');
+      showToast('حدث خطأ أثناء تقديم الطلب. حاول مرة أخرى.', 'error');
     }
+  };
+
+  const handleFreezeRequest = () => {
+    setShowConfirmFreezeModal(true);
   };
 
   const getStatusLabel = (status: string) => {
@@ -211,15 +236,6 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ currentUser, showToast
             <div className="space-y-1">
               <div className="flex items-center gap-2">
                 <h1 className="text-xl font-black text-[#0f172a]">{currentUser.name}</h1>
-                <span
-                  className={`text-[10px] px-2.5 py-0.5 rounded border font-bold uppercase ${
-                    currentUser.role === 'admin'
-                      ? 'bg-amber-100 text-amber-900 border-amber-300'
-                      : 'bg-slate-100 text-slate-700 border-slate-300'
-                  }`}
-                >
-                  {currentUser.role === 'admin' ? 'أدمن' : 'عضو'}
-                </span>
               </div>
               <p className="text-xs text-slate-500 font-bold">{currentUser.email}</p>
               <div className="flex items-center gap-4 text-xs text-slate-500 font-bold pt-1">
@@ -246,11 +262,17 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ currentUser, showToast
         <div className="pt-4 flex justify-end">
           <button
             onClick={handleFreezeRequest}
-            disabled={freezeRequested || currentUser.status === 'frozen'}
-            className="flex items-center gap-2 px-3.5 py-2 bg-slate-100 hover:bg-rose-50 text-slate-700 hover:text-rose-800 border border-slate-300 hover:border-rose-300 rounded text-xs font-bold transition-colors disabled:opacity-50"
+            disabled={freezeRequested || currentUser.freezeRequested || currentUser.status === 'frozen'}
+            className="flex items-center gap-2 px-3.5 py-2 bg-slate-100 hover:bg-rose-50 text-slate-700 hover:text-rose-800 border border-slate-300 hover:border-rose-300 rounded text-xs font-bold transition-colors disabled:opacity-50 cursor-pointer"
           >
             <Snowflake className="w-4 h-4 text-slate-500" />
-            <span>{freezeRequested ? 'تم تقديم طلب التجميد' : 'طلب تجميد الحساب'}</span>
+            <span>
+              {currentUser.status === 'frozen'
+                ? 'الحساب مُجمّد حالياً'
+                : freezeRequested || currentUser.freezeRequested
+                ? 'تم تقديم طلب التجميد للإدارة ⏳'
+                : 'طلب تجميد الحساب ❄️'}
+            </span>
           </button>
         </div>
       </div>
@@ -418,6 +440,52 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ currentUser, showToast
         </form>
       </div>
 
+      {/* Special Admin Section: Unfreeze Requests and Member Notes */}
+      {currentUser.role === 'admin' && (
+        <div className="bg-white border border-blue-200 rounded-xl p-5 space-y-4 shadow-sm">
+          <div className="flex items-center justify-between pb-3 border-b border-blue-100">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 bg-blue-100 text-blue-800 rounded-xl">
+                <Snowflake className="w-5 h-5" />
+              </div>
+              <div>
+                <h2 className="text-base font-black text-slate-900">طلبات فك التجميد والملاحظات (خاص بالأدمن)</h2>
+                <p className="text-xs text-slate-500 font-bold">الأسباب والملاحظات المقدمة من الأعضاء لفك تجميد حساباتهم</p>
+              </div>
+            </div>
+            <span className="text-xs font-black px-2.5 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg">
+              {unfreezeRequests.length} طلبات
+            </span>
+          </div>
+
+          {unfreezeRequests.length === 0 ? (
+            <div className="p-6 text-center text-slate-400 text-xs font-bold bg-slate-50 rounded-xl border border-dashed border-slate-200">
+              لا توجد طلبات فك تجميد معلقة حالياً.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {unfreezeRequests.map((req) => (
+                <div key={req.id} className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2 text-xs">
+                  <div className="flex items-center justify-between font-black text-slate-900">
+                    <span className="flex items-center gap-1.5">
+                      <User className="w-4 h-4 text-slate-500" />
+                      {req.userName} ({req.userEmail})
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-mono">
+                      {req.requestedAt ? new Date(req.requestedAt).toLocaleString('ar-LY') : ''}
+                    </span>
+                  </div>
+                  <div className="p-2.5 bg-white border border-slate-200 rounded-lg text-slate-800 leading-relaxed font-medium">
+                    <strong className="text-blue-900 block text-[11px] mb-1">السبب / الملاحظة المدونة:</strong>
+                    {req.note || 'لم يُدخل العضو ملاحظة مدونة'}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Admin Database Repair Tool Card */}
       {currentUser.role === 'admin' && (
         <div className="bg-amber-50/70 border border-amber-300 rounded-lg p-5 shadow-sm space-y-4">
@@ -577,6 +645,48 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ currentUser, showToast
                 className="px-5 py-2 bg-[#1e293b] hover:bg-slate-800 text-amber-400 text-xs font-black rounded-xl transition-colors cursor-pointer"
               >
                 موافق وإغلاق التقرير
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Custom Confirmation Modal for Freeze Request */}
+      {showConfirmFreezeModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-xs flex items-center justify-center p-4 dir-rtl animate-fadeIn">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+            <div className="flex items-center gap-3 text-cyan-800 pb-2 border-b border-slate-100">
+              <div className="p-2.5 bg-cyan-100 rounded-xl">
+                <Snowflake className="w-6 h-6 text-cyan-700" />
+              </div>
+              <div>
+                <h3 className="text-base font-black text-slate-900">تأكيد تقديم طلب تجميد الحساب</h3>
+                <p className="text-xs font-bold text-slate-500">إشعار إدارة أرتياتك</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-700 font-medium leading-relaxed bg-slate-50 p-3.5 rounded-xl border border-slate-200">
+              هل أنت متأكد من تقديم طلب لتجميد حسابك الشخصي؟
+              <br />
+              <strong className="font-black text-slate-900 block mt-1">ماذا يحدث بعد تقديم الطلب؟</strong>
+              • سيظهر شريط (طلب تجميد ⏳) لدى إدارة الاستوديو في قائمة الأعضاء.
+              <br />
+              • سيتلقى الأدمن إشعاراً وبنداً في سجل الأحداث لمراجعة وتأكيد طلب التجميد.
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                onClick={() => setShowConfirmFreezeModal(false)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold rounded-xl transition-colors cursor-pointer"
+              >
+                إلغاء
+              </button>
+              <button
+                onClick={executeFreezeRequest}
+                className="px-5 py-2 bg-cyan-700 hover:bg-cyan-800 text-white font-black text-xs rounded-xl shadow transition-colors cursor-pointer active:scale-95 flex items-center gap-2"
+              >
+                <Snowflake className="w-4 h-4" />
+                <span>تأكيد وتقديم الطلب</span>
               </button>
             </div>
           </div>

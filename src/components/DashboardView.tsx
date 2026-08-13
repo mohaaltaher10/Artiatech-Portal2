@@ -30,6 +30,34 @@ interface DashboardViewProps {
   onSelectTab?: (tab: TabType) => void;
 }
 
+// Strip HTML tags for clean card snippet previews
+const stripHtml = (html: string) => {
+  if (!html) return '';
+  return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+};
+
+// Formatted Announcement Content Component (supports HTML & formatted text)
+const FormattedAnnouncementContent: React.FC<{ content: string }> = ({ content }) => {
+  if (!content) return <p className="text-slate-400 italic text-xs">لا يوجد نص في هذا الإعلان.</p>;
+
+  const isHtml = /<[a-z][\s\S]*>/i.test(content.trim());
+
+  if (isHtml) {
+    return (
+      <div
+        className="announcement-html-content text-xs text-slate-800 leading-relaxed font-medium dir-rtl overflow-x-auto space-y-2 [&_p]:my-1.5 [&_ul]:list-disc [&_ul]:pr-5 [&_ol]:list-decimal [&_ol]:pr-5 [&_li]:my-1 [&_h1]:text-base [&_h1]:font-black [&_h2]:text-sm [&_h2]:font-black [&_h3]:text-xs [&_h3]:font-black"
+        dangerouslySetInnerHTML={{ __html: content }}
+      />
+    );
+  }
+
+  return (
+    <div className="text-xs text-slate-800 leading-relaxed font-medium whitespace-pre-wrap break-words space-y-2">
+      {content}
+    </div>
+  );
+};
+
 export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, onSelectTab }) => {
   const [locations, setLocations] = useState<TreasuryLocation[]>([]);
   const [slices, setSlices] = useState<DistributionFundSlice[]>([]);
@@ -242,7 +270,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, onSel
           <div className="flex items-center justify-between pb-3 border-b border-slate-200 mb-4">
             <div className="flex items-center gap-2">
               <Megaphone className="w-4 h-4 text-[#1e293b]" />
-              <h2 className="text-base font-black text-[#0f172a]">آخر الإعلانات الرسمية</h2>
+              <h2 className="text-base font-black text-[#0f172a]">آخر الإعلانات</h2>
             </div>
             {onSelectTab && (
               <button
@@ -275,7 +303,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, onSel
                     </span>
                   </div>
                   <p className="text-slate-600 text-xs line-clamp-2 leading-relaxed font-medium">
-                    {ann.content}
+                    {stripHtml(ann.content)}
                   </p>
                   <div className="flex items-center justify-between pt-1 text-[11px] text-slate-500 font-bold">
                     <span>الناشر: {ann.createdBy || 'الإدارة'}</span>
@@ -355,9 +383,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, onSel
                 <span>الناشر: <strong className="text-slate-900">{selectedAnnouncement.createdBy || 'الإدارة'}</strong></span>
                 <span>التاريخ: {selectedAnnouncement.createdDate}</span>
               </div>
-              <p className="text-xs text-slate-800 leading-relaxed whitespace-pre-wrap font-medium">
-                {selectedAnnouncement.content}
-              </p>
+              <FormattedAnnouncementContent content={selectedAnnouncement.content} />
             </div>
             <div className="p-3 bg-slate-50 border-t border-slate-200 flex justify-end">
               <button

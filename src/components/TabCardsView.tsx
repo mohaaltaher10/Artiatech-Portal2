@@ -149,18 +149,6 @@ export const TabCardsView: React.FC<TabCardsViewProps> = ({ currentUser, onSelec
               أهلاً بك، {currentUser.name}
             </h1>
           </div>
-
-          <div className="flex items-center gap-3 bg-slate-800/90 border border-slate-700 px-4 py-3 rounded-xl shrink-0">
-            <div className="w-10 h-10 rounded-lg bg-amber-400/20 text-amber-400 font-black flex items-center justify-center shrink-0">
-              <Building2 className="w-5 h-5" />
-            </div>
-            <div>
-              <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider">صفة الحساب</span>
-              <span className="text-sm font-black text-amber-400 block">
-                {currentUser.role === 'admin' ? 'أدمن الاستوديو (صلاحيات كاملة)' : 'عضو استوديو'}
-              </span>
-            </div>
-          </div>
         </div>
       </div>
 

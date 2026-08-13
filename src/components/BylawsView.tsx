@@ -266,7 +266,6 @@ export const BylawsView: React.FC<BylawsViewProps> = ({ currentUser, showToast }
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-200 pb-4">
         <div>
           <h1 className="text-xl sm:text-2xl font-black text-slate-900">اللائحة الداخلية - استوديو أرتياتك</h1>
-          <p className="text-xs text-slate-500 font-medium mt-0.5">النظام الأساسي والمواد التنفيذية الـ (14)</p>
         </div>
 
         <div className="flex items-center gap-2 no-print shrink-0">

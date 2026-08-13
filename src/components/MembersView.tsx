@@ -10,10 +10,22 @@ interface MembersViewProps {
   showToast: (msg: string, type: 'success' | 'error') => void;
 }
 
+interface UnfreezeRequestItem {
+  id: string;
+  userId: string;
+  userName: string;
+  userEmail: string;
+  note: string;
+  requestedAt: string;
+  status: string;
+}
+
 export const MembersView: React.FC<MembersViewProps> = ({ currentUser, showToast }) => {
   const [members, setMembers] = useState<UserProfile[]>([]);
+  const [unfreezeRequests, setUnfreezeRequests] = useState<UnfreezeRequestItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleteConfirmMember, setDeleteConfirmMember] = useState<{ id: string; name: string } | null>(null);
+  const [freezeConfirmMember, setFreezeConfirmMember] = useState<{ member: UserProfile; actionText: string; newStatus: UserStatus } | null>(null);
 
   // Form State
   const [showAddForm, setShowAddForm] = useState(false);
@@ -27,7 +39,7 @@ export const MembersView: React.FC<MembersViewProps> = ({ currentUser, showToast
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    const unsub = onValue(ref(db, 'users'), (snapshot) => {
+    const unsubUsers = onValue(ref(db, 'users'), (snapshot) => {
       const val = snapshot.val();
       const list: UserProfile[] = val ? Object.keys(val).map((k) => ({ id: k, ...val[k] })) : [];
       list.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ar'));
@@ -38,7 +50,19 @@ export const MembersView: React.FC<MembersViewProps> = ({ currentUser, showToast
       setLoading(false);
     });
 
-    return () => unsub();
+    const unsubReqs = onValue(ref(db, 'unfreeze_requests'), (snapshot) => {
+      const val = snapshot.val();
+      const list: UnfreezeRequestItem[] = val ? Object.keys(val).map((k) => ({ id: k, ...val[k] })) : [];
+      list.sort((a, b) => new Date(b.requestedAt || 0).getTime() - new Date(a.requestedAt || 0).getTime());
+      setUnfreezeRequests(list);
+    }, (err) => {
+      console.warn('Unfreeze requests listener notice:', err);
+    });
+
+    return () => {
+      unsubUsers();
+      unsubReqs();
+    };
   }, []);
 
   const resetForm = () => {
@@ -80,14 +104,6 @@ export const MembersView: React.FC<MembersViewProps> = ({ currentUser, showToast
           role,
           status,
         });
-
-        await logActivity(
-          currentUser.id,
-          currentUser.name,
-          currentUser.role,
-          'تعديل عضو',
-          `${currentUser.name} عدّل بيانات العضو: ${name.trim()}`
-        );
 
         showToast('تمت تحديث بيانات العضو بنجاح ✓', 'success');
       } else {
@@ -141,7 +157,7 @@ export const MembersView: React.FC<MembersViewProps> = ({ currentUser, showToast
   };
 
   // Toggle Freeze Status
-  const handleToggleFreeze = async (m: UserProfile) => {
+  const handleToggleFreeze = (m: UserProfile) => {
     if (m.email?.toLowerCase() === 'artiatechstudio@gmail.com') {
       showToast('حساب مالك الاستوديو الرئيسي محمي ولا يمكن تجميده!', 'error');
       return;
@@ -150,11 +166,18 @@ export const MembersView: React.FC<MembersViewProps> = ({ currentUser, showToast
     const newStatus: UserStatus = m.status === 'frozen' ? 'main' : 'frozen';
     const actionText = newStatus === 'frozen' ? 'تجميد' : 'إلغاء تجميد';
 
-    if (!window.confirm(`هل أنت تأكد من ${actionText} حساب العضو "${m.name}"؟`)) return;
+    setFreezeConfirmMember({ member: m, actionText, newStatus });
+  };
+
+  const executeToggleFreeze = async () => {
+    if (!freezeConfirmMember) return;
+    const { member: m, actionText, newStatus } = freezeConfirmMember;
+    setFreezeConfirmMember(null);
 
     try {
       await update(ref(db, `users/${m.id}`), {
         status: newStatus,
+        freezeRequested: false,
       });
 
       await logActivity(
@@ -186,27 +209,34 @@ export const MembersView: React.FC<MembersViewProps> = ({ currentUser, showToast
 
     try {
       await remove(ref(db, `users/${id}`));
-      await logActivity(
-        currentUser.id,
-        currentUser.name,
-        currentUser.role,
-        'حذف عضو',
-        `${currentUser.name} حذف العضو: ${name}`
-      );
       showToast('تم حذف العضو بنجاح ✓', 'success');
     } catch (err) {
       showToast('حدث خطأ أثناء الحذف.', 'error');
     }
   };
 
-  const getStatusBadge = (st: UserStatus) => {
+  const getStatusBadge = (st: UserStatus, freezeRequested?: boolean) => {
+    if (st === 'frozen') {
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-rose-100 text-rose-900 border border-rose-300 rounded font-black text-[10px]">
+          <Snowflake className="w-3 h-3 text-rose-700" />
+          مُجمّد
+        </span>
+      );
+    }
+    if (freezeRequested) {
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-100 text-amber-900 border border-amber-300 rounded font-black text-[10px]" title="طلب هذا العضو تجميد حسابه">
+          <Snowflake className="w-3 h-3 text-amber-700 animate-pulse" />
+          طلب تجميد ⏳
+        </span>
+      );
+    }
     switch (st) {
       case 'main':
         return <span className="text-slate-800 font-bold text-[11px]">أساسي</span>;
       case 'participant':
         return <span className="text-slate-800 font-bold text-[11px]">مشارك</span>;
-      case 'frozen':
-        return <span className="text-slate-800 font-bold text-[11px]">مجمد</span>;
       default:
         return <span className="text-slate-800 font-bold text-[11px]">أساسي</span>;
     }
@@ -372,7 +402,7 @@ export const MembersView: React.FC<MembersViewProps> = ({ currentUser, showToast
                       {m.role === 'admin' ? 'أدمن' : 'عضو'}
                     </span>
                   </td>
-                  <td className="p-3">{getStatusBadge(m.status)}</td>
+                  <td className="p-3">{getStatusBadge(m.status, m.freezeRequested)}</td>
                   <td className="p-3 text-slate-500 font-mono font-bold">{formatDate(m.joinDate)}</td>
 
                   {currentUser.role === 'admin' && (
@@ -388,7 +418,7 @@ export const MembersView: React.FC<MembersViewProps> = ({ currentUser, showToast
                             setStatus(m.status);
                             setShowAddForm(true);
                           }}
-                          className="p-1 text-slate-600 hover:bg-slate-200 rounded"
+                          className="p-1 text-slate-600 hover:bg-slate-200 rounded cursor-pointer"
                           title="تعديل البيانات"
                         >
                           <Edit2 className="w-3.5 h-3.5" />
@@ -397,14 +427,25 @@ export const MembersView: React.FC<MembersViewProps> = ({ currentUser, showToast
                         {/* Freeze / Unfreeze Toggle Button */}
                         <button
                           onClick={() => handleToggleFreeze(m)}
-                          className={`p-1 rounded ${
+                          className={`p-1 rounded cursor-pointer flex items-center gap-1 ${
                             m.status === 'frozen'
-                              ? 'text-emerald-700 hover:bg-emerald-100'
+                              ? 'text-emerald-700 hover:bg-emerald-100 bg-emerald-50'
+                              : m.freezeRequested
+                              ? 'text-rose-700 hover:bg-rose-100 bg-rose-50 border border-rose-300 font-black px-1.5'
                               : 'text-amber-700 hover:bg-amber-100'
                           }`}
-                          title={m.status === 'frozen' ? 'إلغاء التجميد' : 'تجميد الحساب'}
+                          title={
+                            m.status === 'frozen'
+                              ? 'إلغاء التجميد'
+                              : m.freezeRequested
+                              ? 'موافقة وتجميد الحساب (بناءً على طلب العضو)'
+                              : 'تجميد الحساب'
+                          }
                         >
                           <Snowflake className="w-3.5 h-3.5" />
+                          {m.freezeRequested && m.status !== 'frozen' && (
+                            <span className="text-[10px]">موافقة التجميد</span>
+                          )}
                         </button>
 
                         {/* Delete Button */}
@@ -452,6 +493,39 @@ export const MembersView: React.FC<MembersViewProps> = ({ currentUser, showToast
                 className="px-4 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-lg cursor-pointer"
               >
                 تأكيد الحذف
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Freeze Confirmation Modal */}
+      {freezeConfirmMember && (
+        <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4 dir-rtl">
+          <div className="bg-white rounded-xl max-w-md w-full p-5 space-y-4 shadow-xl border border-slate-200">
+            <div className="flex items-center gap-2.5 text-amber-800 pb-2 border-b border-slate-100">
+              <Snowflake className="w-5 h-5 text-amber-700" />
+              <h3 className="font-black text-sm text-slate-900">
+                تأكيد {freezeConfirmMember.actionText} الحساب
+              </h3>
+            </div>
+            <p className="text-xs text-slate-700 font-medium leading-relaxed bg-slate-50 p-3 rounded-lg border border-slate-200">
+              هل أنت متأكد من {freezeConfirmMember.actionText} حساب العضو <strong>"{freezeConfirmMember.member.name}"</strong>؟
+            </p>
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setFreezeConfirmMember(null)}
+                className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg cursor-pointer"
+              >
+                إلغاء
+              </button>
+              <button
+                type="button"
+                onClick={executeToggleFreeze}
+                className="px-4 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-lg shadow cursor-pointer active:scale-95"
+              >
+                تأكيد الإجراء
               </button>
             </div>
           </div>

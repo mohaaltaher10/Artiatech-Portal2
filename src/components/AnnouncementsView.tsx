@@ -1,13 +1,19 @@
 import React, { useEffect, useState } from 'react';
 import { db, formatDate, logActivity, generateReadableId } from '../lib/firebase';
-import { ref, onValue, set, remove } from 'firebase/database';
+import { ref, onValue, set, update, remove } from 'firebase/database';
 import { Announcement, UserProfile } from '../types';
-import { Megaphone, PlusCircle, Pin, Trash2, Search, X, Eye, Calendar, User } from 'lucide-react';
+import { Megaphone, PlusCircle, Pin, Trash2, Search, X, Eye, Calendar, User, Edit } from 'lucide-react';
 
 interface AnnouncementsViewProps {
   currentUser: UserProfile;
   showToast: (msg: string, type: 'success' | 'error') => void;
 }
+
+// Strip HTML tags for clean card snippet previews
+const stripHtml = (html: string) => {
+  if (!html) return '';
+  return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+};
 
 // Formatted Announcement Content Component (supports HTML & formatted text)
 const FormattedAnnouncementContent: React.FC<{ content: string }> = ({ content }) => {
@@ -46,6 +52,12 @@ export const AnnouncementsView: React.FC<AnnouncementsViewProps> = ({
   const [content, setContent] = useState('');
   const [isPinned, setIsPinned] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  // Edit Announcement State
+  const [editingAnn, setEditingAnn] = useState<Announcement | null>(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editContent, setEditContent] = useState('');
+  const [editIsPinned, setEditIsPinned] = useState(false);
 
   // Search & Filter State
   const [searchQuery, setSearchQuery] = useState('');
@@ -117,19 +129,53 @@ export const AnnouncementsView: React.FC<AnnouncementsViewProps> = ({
     }
   };
 
+  const handleOpenEdit = (ann: Announcement) => {
+    setEditingAnn(ann);
+    setEditTitle(ann.title || '');
+    setEditContent(ann.content || '');
+    setEditIsPinned(!!ann.isPinned);
+  };
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingAnn) return;
+    if (!editTitle.trim() || !editContent.trim()) {
+      showToast('يرجى كتابة عنوان ونص الإعلان', 'error');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      await update(ref(db, `announcements/${editingAnn.id}`), {
+        title: editTitle.trim(),
+        content: editContent.trim(),
+        isPinned: editIsPinned,
+      });
+
+      if (selectedAnn?.id === editingAnn.id) {
+        setSelectedAnn({
+          ...selectedAnn,
+          title: editTitle.trim(),
+          content: editContent.trim(),
+          isPinned: editIsPinned,
+        });
+      }
+
+      showToast('تم تحديث الإعلان بنجاح ✓', 'success');
+      setEditingAnn(null);
+    } catch (err) {
+      showToast('حدث خطأ أثناء تحديث الإعلان.', 'error');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const handleDeleteAnnouncement = async (id: string, annTitle: string) => {
     try {
       await remove(ref(db, `announcements/${id}`));
       if (selectedAnn?.id === id) {
         setSelectedAnn(null);
       }
-      await logActivity(
-        currentUser.id,
-        currentUser.name,
-        currentUser.role,
-        'حذف إعلان',
-        `${currentUser.name} حذف الإعلان: ${annTitle}`
-      );
       showToast('تم حذف الإعلان بنجاح ✓', 'success');
     } catch (err) {
       showToast('حدث خطأ أثناء الحذف.', 'error');
@@ -161,8 +207,7 @@ export const AnnouncementsView: React.FC<AnnouncementsViewProps> = ({
             <Megaphone className="w-5 h-5 text-slate-800" />
           </div>
           <div>
-            <h2 className="text-base font-black text-[#0f172a]">الإعلانات والتنويهات الرسمية</h2>
-            <p className="text-xs text-slate-500 font-bold">عرض القرارات والتنويهات الصادرة عن إدارة الاستوديو</p>
+            <h2 className="text-base font-black text-[#0f172a]">الإعلانات والتنويهات</h2>
           </div>
         </div>
 
@@ -328,7 +373,7 @@ export const AnnouncementsView: React.FC<AnnouncementsViewProps> = ({
 
                 {/* Snippet Preview */}
                 <p className="text-xs text-slate-600 font-medium line-clamp-3 leading-relaxed">
-                  {ann.content}
+                  {stripHtml(ann.content) || 'لا يوجد نص للإعلان'}
                 </p>
 
                 {/* Sub Meta */}
@@ -353,14 +398,24 @@ export const AnnouncementsView: React.FC<AnnouncementsViewProps> = ({
                 </button>
 
                 {currentUser.role === 'admin' && (
-                  <button
-                    type="button"
-                    onClick={() => setDeleteConfirmAnn(ann)}
-                    className="p-1.5 text-slate-400 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                    title="حذف الإعلان"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => handleOpenEdit(ann)}
+                      className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors cursor-pointer"
+                      title="تعديل الإعلان"
+                    >
+                      <Edit className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDeleteConfirmAnn(ann)}
+                      className="p-1.5 text-slate-400 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                      title="حذف الإعلان"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 )}
               </div>
             </div>
@@ -407,20 +462,35 @@ export const AnnouncementsView: React.FC<AnnouncementsViewProps> = ({
 
             {/* Modal Footer */}
             <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
-              {currentUser.role === 'admin' && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    const target = selectedAnn;
-                    setSelectedAnn(null);
-                    setDeleteConfirmAnn(target);
-                  }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold rounded-lg transition-colors cursor-pointer"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  <span>حذف الإعلان</span>
-                </button>
-              )}
+              {currentUser.role === 'admin' ? (
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const target = selectedAnn;
+                      handleOpenEdit(target);
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 text-xs font-bold rounded-lg transition-colors cursor-pointer"
+                  >
+                    <Edit className="w-3.5 h-3.5 text-amber-700" />
+                    <span>تعديل الإعلان</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const target = selectedAnn;
+                      setSelectedAnn(null);
+                      setDeleteConfirmAnn(target);
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold rounded-lg transition-colors cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>حذف الإعلان</span>
+                  </button>
+                </div>
+              ) : <div />}
+
               <button
                 type="button"
                 onClick={() => setSelectedAnn(null)}
@@ -430,6 +500,83 @@ export const AnnouncementsView: React.FC<AnnouncementsViewProps> = ({
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Edit Announcement Modal */}
+      {editingAnn && (
+        <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4">
+          <form
+            onSubmit={handleSaveEdit}
+            className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col space-y-4 p-6"
+          >
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200">
+              <h3 className="text-sm font-black text-[#0f172a] flex items-center gap-2">
+                <Edit className="w-4 h-4 text-amber-600" />
+                <span>تعديل الإعلان: {editingAnn.title}</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setEditingAnn(null)}
+                className="text-slate-400 hover:text-slate-700 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">عنوان الإعلان</label>
+              <input
+                type="text"
+                required
+                value={editTitle}
+                onChange={(e) => setEditTitle(e.target.value)}
+                className="w-full p-2.5 text-xs font-bold bg-slate-50 border border-slate-300 rounded-lg focus:bg-white focus:border-[#1e293b] focus:outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">تفاصيل ومحتوى الإعلان</label>
+              <textarea
+                rows={7}
+                required
+                value={editContent}
+                onChange={(e) => setEditContent(e.target.value)}
+                className="w-full p-3 text-xs font-medium bg-slate-50 border border-slate-300 rounded-lg focus:bg-white focus:border-[#1e293b] focus:outline-none leading-relaxed"
+              />
+            </div>
+
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="editPinCheck"
+                checked={editIsPinned}
+                onChange={(e) => setEditIsPinned(e.target.checked)}
+                className="w-4 h-4 text-slate-900 rounded border-slate-300 cursor-pointer"
+              />
+              <label htmlFor="editPinCheck" className="text-xs font-bold text-slate-800 flex items-center gap-1 cursor-pointer">
+                <Pin className="w-3.5 h-3.5 text-amber-600" />
+                تثبيت الإعلان في أعلى القائمة 📌
+              </label>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-slate-200">
+              <button
+                type="button"
+                onClick={() => setEditingAnn(null)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg cursor-pointer"
+              >
+                إلغاء
+              </button>
+              <button
+                type="submit"
+                disabled={submitting}
+                className="px-5 py-2 bg-[#1e293b] hover:bg-slate-800 text-amber-400 text-xs font-black rounded-lg disabled:opacity-50 cursor-pointer"
+              >
+                حفظ التعديلات
+              </button>
+            </div>
+          </form>
         </div>
       )}
 

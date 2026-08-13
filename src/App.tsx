@@ -101,6 +101,7 @@ export default function App() {
       await signOut(auth);
       setCurrentUserProfile(null);
       setAuthUser(null);
+      setActiveTab(null);
       showToast('تم تسجيل الخروج بنجاح', 'success');
     } catch (err) {
       console.error('Logout error:', err);

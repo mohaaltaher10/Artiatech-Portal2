@@ -46,11 +46,16 @@ export const ActivityLogsView: React.FC<ActivityLogsViewProps> = () => {
     return () => unsub();
   }, []);
 
-  // Get unique members and actions for filters
-  const uniqueUsers = Array.from(new Set(logs.map((l) => l.userName).filter(Boolean)));
-  const uniqueActions = Array.from(new Set(logs.map((l) => l.action).filter(Boolean)));
+  // Filter out all freeze/unfreeze related logs from public logs
+  const publicLogs = logs.filter(
+    (l) => !l.action?.includes('تجميد') && !l.details?.includes('تجميد') && !l.action?.includes('فك')
+  );
 
-  const filteredLogs = logs.filter((log) => {
+  // Get unique members and actions for filters
+  const uniqueUsers = Array.from(new Set(publicLogs.map((l) => l.userName).filter(Boolean)));
+  const uniqueActions = Array.from(new Set(publicLogs.map((l) => l.action).filter(Boolean)));
+
+  const filteredLogs = publicLogs.filter((log) => {
     if (selectedUser !== 'all' && log.userName !== selectedUser) return false;
     if (selectedAction !== 'all' && log.action !== selectedAction) return false;
     if (

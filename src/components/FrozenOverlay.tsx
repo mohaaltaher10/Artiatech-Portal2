@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Snowflake, Send, CheckCircle2, ShieldAlert } from 'lucide-react';
-import { ref, push, set } from 'firebase/database';
-import { db, logActivity, generateReadableId } from '../lib/firebase';
+import { Snowflake, Send, CheckCircle2, ShieldAlert, LogOut } from 'lucide-react';
+import { ref, set } from 'firebase/database';
+import { db, generateReadableId, auth } from '../lib/firebase';
+import { signOut } from 'firebase/auth';
 import { UserProfile } from '../types';
 
 interface FrozenOverlayProps {
@@ -27,14 +28,6 @@ export const FrozenOverlay: React.FC<FrozenOverlayProps> = ({ currentUser, showT
         requestedAt: new Date().toISOString(),
         status: 'pending',
       });
-
-      await logActivity(
-        currentUser.id,
-        currentUser.name,
-        currentUser.role,
-        'طلب فك التجميد',
-        `أرسل العضو ${currentUser.name} طلباً لفك تجميد حسابه.`
-      );
 
       setRequested(true);
       showToast('تم إرسال طلب فك التجميد إلى الأدمن بنجاح ✓', 'success');
@@ -94,6 +87,16 @@ export const FrozenOverlay: React.FC<FrozenOverlayProps> = ({ currentUser, showT
             <p className="text-[11px] text-emerald-700 font-normal">سيتم مراجعة طلبك وتنشيط حسابك من قبل الأدمن قريباً.</p>
           </div>
         )}
+
+        <div className="pt-2 border-t border-slate-100">
+          <button
+            onClick={() => signOut(auth)}
+            className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer border border-slate-200"
+          >
+            <LogOut className="w-4 h-4 text-slate-600" />
+            <span>تسجيل الخروج من الحساب</span>
+          </button>
+        </div>
       </div>
     </div>
   );

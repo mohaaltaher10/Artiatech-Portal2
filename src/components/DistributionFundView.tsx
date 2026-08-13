@@ -28,6 +28,7 @@ export const DistributionFundView: React.FC<DistributionFundViewProps> = ({
 
   // Submitting state
   const [submitting, setSubmitting] = useState(false);
+  const [deleteConfirmSlice, setDeleteConfirmSlice] = useState<{ id: string; name: string } | null>(null);
 
   useEffect(() => {
     // 1. Listen to distribution fund
@@ -143,8 +144,15 @@ export const DistributionFundView: React.FC<DistributionFundViewProps> = ({
   };
 
   // Delete Slice (Admin)
-  const handleDeleteSlice = async (id: string, name: string) => {
-    if (!window.confirm(`هل أنت تأكد من حذف الشريحة "${name}"؟`)) return;
+  const handleDeleteSlice = (id: string, name: string) => {
+    setDeleteConfirmSlice({ id, name });
+  };
+
+  const executeDeleteSlice = async () => {
+    if (!deleteConfirmSlice) return;
+    const { id, name } = deleteConfirmSlice;
+    setDeleteConfirmSlice(null);
+
     try {
       await remove(ref(db, `distribution_fund/${id}`));
       await logActivity(
@@ -401,6 +409,34 @@ export const DistributionFundView: React.FC<DistributionFundViewProps> = ({
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteConfirmSlice && (
+        <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4 dir-rtl">
+          <div className="bg-white rounded-xl max-w-md w-full p-5 space-y-4 shadow-xl border border-slate-200">
+            <h3 className="font-black text-sm text-slate-900">تأكيد حذف الشريحة</h3>
+            <p className="text-xs text-slate-600 font-bold leading-relaxed">
+              هل أنت متأكد من رغبتك في حذف شريحة التوزيعات "{deleteConfirmSlice.name}"؟ لا يمكن التراجع عن هذه الخطوة.
+            </p>
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmSlice(null)}
+                className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg cursor-pointer"
+              >
+                إلغاء
+              </button>
+              <button
+                type="button"
+                onClick={executeDeleteSlice}
+                className="px-4 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-lg shadow cursor-pointer active:scale-95"
+              >
+                تأكيد الحذف
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

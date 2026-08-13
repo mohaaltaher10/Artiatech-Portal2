@@ -1,0 +1,31 @@
+{
+  "short_name": "Artiatech",
+  "name": "Artiatech Portal",
+  "description": "استوديو أرتياتك للأعمال الفنية والتقنية - Artiatech Studio Portal",
+  "icons": [
+    {
+      "src": "/icon.png",
+      "type": "image/png",
+      "sizes": "192x192 512x512"
+    },
+    {
+      "src": "/icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#ffffff",
+  "theme_color": "#0f172a",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "lang": "ar",
+  "dir": "rtl"
+}

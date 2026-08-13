@@ -410,7 +410,6 @@ export const ProjectBookletsView: React.FC<ProjectBookletsViewProps> = ({
           </div>
           <div>
             <h2 className="text-base font-black text-[#0f172a]">كتيبات المشاريع</h2>
-            <p className="text-xs text-slate-500 font-bold">إدارة واستعراض كتيبات وبنود مشاريع الاستوديو</p>
           </div>
         </div>
 
