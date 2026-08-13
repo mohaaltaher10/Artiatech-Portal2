@@ -140,18 +140,17 @@ export const MembersView: React.FC<MembersViewProps> = ({ currentUser, showToast
     }
   };
 
-  // Freeze modal confirm state
-  const [freezeConfirmMember, setFreezeConfirmMember] = useState<{ member: UserProfile; actionText: string } | null>(null);
-
   // Toggle Freeze Status
   const handleToggleFreeze = async (m: UserProfile) => {
     if (m.email?.toLowerCase() === 'artiatechstudio@gmail.com') {
-      showToast('حساب مالك الاستوديو (artiatechstudio@gmail.com) محمي من التجميد!', 'error');
+      showToast('حساب مالك الاستوديو الرئيسي محمي ولا يمكن تجميده!', 'error');
       return;
     }
 
     const newStatus: UserStatus = m.status === 'frozen' ? 'main' : 'frozen';
     const actionText = newStatus === 'frozen' ? 'تجميد' : 'إلغاء تجميد';
+
+    if (!window.confirm(`هل أنت تأكد من ${actionText} حساب العضو "${m.name}"؟`)) return;
 
     try {
       await update(ref(db, `users/${m.id}`), {
@@ -174,14 +173,14 @@ export const MembersView: React.FC<MembersViewProps> = ({ currentUser, showToast
 
   // Delete Member
   const handleDeleteMember = async (id: string, name: string) => {
-    const targetMember = members.find((m) => m.id === id);
-    if (targetMember?.email?.toLowerCase() === 'artiatechstudio@gmail.com') {
-      showToast('حساب مالك الاستوديو (artiatechstudio@gmail.com) محمي من الحذف!', 'error');
+    if (id === currentUser.id) {
+      showToast('لا يمكنك حذف حسابك الحالي', 'error');
       return;
     }
 
-    if (id === currentUser.id) {
-      showToast('لا يمكنك حذف حسابك الحالي', 'error');
+    const targetMember = members.find((m) => m.id === id);
+    if (targetMember?.email?.toLowerCase() === 'artiatechstudio@gmail.com') {
+      showToast('حساب مالك الاستوديو الرئيسي محمي ولا يمكن حذفه!', 'error');
       return;
     }
 
@@ -397,16 +396,8 @@ export const MembersView: React.FC<MembersViewProps> = ({ currentUser, showToast
 
                         {/* Freeze / Unfreeze Toggle Button */}
                         <button
-                          type="button"
-                          onClick={() => {
-                            if (m.email?.toLowerCase() === 'artiatechstudio@gmail.com') {
-                              showToast('حساب مالك الاستوديو (artiatechstudio@gmail.com) محمي من التجميد!', 'error');
-                              return;
-                            }
-                            const actionText = m.status === 'frozen' ? 'إلغاء تجميد' : 'تجميد';
-                            setFreezeConfirmMember({ member: m, actionText });
-                          }}
-                          className={`p-1 rounded cursor-pointer ${
+                          onClick={() => handleToggleFreeze(m)}
+                          className={`p-1 rounded ${
                             m.status === 'frozen'
                               ? 'text-emerald-700 hover:bg-emerald-100'
                               : 'text-amber-700 hover:bg-amber-100'
@@ -419,13 +410,7 @@ export const MembersView: React.FC<MembersViewProps> = ({ currentUser, showToast
                         {/* Delete Button */}
                         <button
                           type="button"
-                          onClick={() => {
-                            if (m.email?.toLowerCase() === 'artiatechstudio@gmail.com') {
-                              showToast('حساب مالك الاستوديو (artiatechstudio@gmail.com) محمي من الحذف!', 'error');
-                              return;
-                            }
-                            setDeleteConfirmMember({ id: m.id, name: m.name });
-                          }}
+                          onClick={() => setDeleteConfirmMember({ id: m.id, name: m.name })}
                           className="p-1 text-rose-600 hover:bg-rose-100 rounded cursor-pointer"
                           title="حذف العضو"
                         >
@@ -441,45 +426,13 @@ export const MembersView: React.FC<MembersViewProps> = ({ currentUser, showToast
         </div>
       )}
 
-      {/* Freeze Confirmation Modal */}
-      {freezeConfirmMember && (
-        <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl max-w-md w-full p-5 space-y-4 shadow-xl border border-slate-200">
-            <h3 className="font-black text-sm text-slate-900">تأكيد {freezeConfirmMember.actionText} الحساب</h3>
-            <p className="text-xs text-slate-600 font-bold leading-relaxed">
-              هل أنت تأكيد من رغبتك في {freezeConfirmMember.actionText} حساب العضو "{freezeConfirmMember.member.name}"؟
-            </p>
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => setFreezeConfirmMember(null)}
-                className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg cursor-pointer"
-              >
-                إلغاء
-              </button>
-              <button
-                type="button"
-                onClick={async () => {
-                  const target = freezeConfirmMember.member;
-                  setFreezeConfirmMember(null);
-                  await handleToggleFreeze(target);
-                }}
-                className="px-4 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-lg cursor-pointer"
-              >
-                تأكيد {freezeConfirmMember.actionText}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Delete Confirmation Modal */}
       {deleteConfirmMember && (
         <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-xl max-w-md w-full p-5 space-y-4 shadow-xl border border-slate-200">
             <h3 className="font-black text-sm text-slate-900">تأكيد حذف العضو</h3>
             <p className="text-xs text-slate-600 font-bold leading-relaxed">
-              هل أنت تأكيد من رغبتك في حذف العضو "{deleteConfirmMember.name}"؟ لا يمكن التراجع عن هذه الخطوة.
+              هل أنت متأكد من رغبتك في حذف العضو "{deleteConfirmMember.name}"؟ لا يمكن التراجع عن هذه الخطوة.
             </p>
             <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
               <button
