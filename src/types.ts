@@ -64,6 +64,21 @@ export interface DistributionFundSlice {
   members: SliceMember[];
 }
 
+export interface DistributionFundLog {
+  id: string;
+  sliceId: string;
+  sliceName: string;
+  type: 'CREATE_SLICE' | 'RECHARGE_SLICE' | 'WITHDRAW_MEMBER' | 'DELETE_SLICE' | 'UPDATE_SHARES';
+  typeNameAr: string;
+  amount: number;
+  memberName?: string;
+  memberId?: string;
+  details: string;
+  date: string;
+  performedBy: string;
+  performedById: string;
+}
+
 export type BookletStatus = 'active' | 'archived' | 'under_study' | 'under_revision';
 export type BookletType = 'extended' | 'non_extended';
 

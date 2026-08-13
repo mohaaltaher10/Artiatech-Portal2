@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { db, formatDate, logActivity, generateReadableId } from '../lib/firebase';
+import { sendAppNotification } from '../lib/notifications';
 import { ref, onValue, set, update, remove } from 'firebase/database';
 import { ProjectBooklet, BookletStatus, BookletType, UserProfile } from '../types';
 import {
@@ -317,6 +318,11 @@ export const ProjectBookletsView: React.FC<ProjectBookletsViewProps> = ({
         'إضافة كتيب مشروع',
         `${currentUser.name} أنشأ كتيب مشروع جديد: ${newName.trim()}`
       );
+
+      sendAppNotification(`📁 كتيب مشروع جديد: ${newName.trim()}`, {
+        body: `تم إضافة كتيب مشروع جديد وإسناده للفريق المعني`,
+        tag: `booklet-${newBookletId}`
+      });
 
       showToast('تمت إضافة الكتيب بنجاح ✓', 'success');
       setShowAddForm(false);

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { db, auth, formatCurrency, formatDate, logActivity, repairDatabase, RepairResult } from '../lib/firebase';
+import { isNotificationsEnabled, requestNotificationPermission, setNotificationsEnabled, getNotificationPermission } from '../lib/notifications';
 import { ref, onValue, update } from 'firebase/database';
 import { updatePassword, updateEmail } from 'firebase/auth';
 import { UserProfile, DistributionFundSlice, ProjectBooklet } from '../types';
@@ -21,6 +22,7 @@ import {
   CheckCircle2,
   ShieldCheck,
   RefreshCw,
+  Bell,
   X
 } from 'lucide-react';
 
@@ -57,6 +59,24 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ currentUser, showToast
   const [repairing, setRepairing] = useState(false);
   const [repairReport, setRepairReport] = useState<RepairResult | null>(null);
   const [showConfirmRepairModal, setShowConfirmRepairModal] = useState(false);
+  const [notifActive, setNotifActive] = useState<boolean>(isNotificationsEnabled());
+
+  const handleToggleNotifications = async () => {
+    if (notifActive) {
+      setNotificationsEnabled(false);
+      setNotifActive(false);
+      showToast('تم تعطيل الإشعارات على هذا الجهاز', 'success');
+    } else {
+      const granted = await requestNotificationPermission();
+      if (granted) {
+        setNotifActive(true);
+        showToast('تم تفعيل الإشعارات بنجاح 🔔', 'success');
+      } else {
+        setNotifActive(false);
+        showToast('يرجى السماح بالإشعارات من إعدادات المتصفح أولاً', 'error');
+      }
+    }
+  };
 
   const executeDatabaseRepair = async () => {
     setShowConfirmRepairModal(false);
@@ -438,6 +458,46 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ currentUser, showToast
             {updating ? 'جاري التحديث...' : 'تحديث البيانات'}
           </button>
         </form>
+      </div>
+
+      {/* Classical Notification Settings Card */}
+      <div className="bg-white border border-slate-200 rounded-lg p-5 shadow-sm space-y-3">
+        <div className="flex items-center justify-between pb-3 border-b border-slate-200">
+          <div className="flex items-center gap-2">
+            <Bell className="w-4 h-4 text-[#1e293b]" />
+            <h2 className="text-base font-black text-[#0f172a]">تفضيلات الإشعارات والتنبيهات</h2>
+          </div>
+          <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded ${notifActive ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-slate-100 text-slate-600 border border-slate-300'}`}>
+            {notifActive ? 'الإشعارات مفعّلة ✓' : 'الإشعارات معطلة 🔕'}
+          </span>
+        </div>
+
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-1">
+          <div className="space-y-1">
+            <label htmlFor="notif-toggle" className="text-xs font-black text-slate-800 block cursor-pointer">
+              إشعارات التطبيق الفورية (PWA Push Notifications)
+            </label>
+            <p className="text-xs text-slate-500 font-medium leading-relaxed">
+              تصلك التنبيهات الفورية للإعلانات الجديدة، إسناد كتيبات المشاريع، التوزيعات المالية، وطلبات الحساب عند استخدام البوابة أو تثبيتها كتطبيق.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3 shrink-0">
+            <button
+              id="notif-toggle"
+              type="button"
+              onClick={handleToggleNotifications}
+              className={`px-4 py-2 font-bold text-xs rounded-lg border transition-colors cursor-pointer flex items-center gap-2 ${
+                notifActive
+                  ? 'bg-slate-100 hover:bg-slate-200 text-slate-800 border-slate-300'
+                  : 'bg-[#1e293b] hover:bg-slate-800 text-amber-400 border-[#1e293b]'
+              }`}
+            >
+              <Bell className="w-3.5 h-3.5" />
+              <span>{notifActive ? 'تعطيل الإشعارات' : 'تفعيل الإشعارات على هذا الجهاز'}</span>
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Special Admin Section: Unfreeze Requests and Member Notes */}

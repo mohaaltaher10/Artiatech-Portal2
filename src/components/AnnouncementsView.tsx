@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { db, formatDate, logActivity, generateReadableId } from '../lib/firebase';
+import { sendAppNotification } from '../lib/notifications';
 import { ref, onValue, set, update, remove } from 'firebase/database';
 import { Announcement, UserProfile } from '../types';
 import { Megaphone, PlusCircle, Pin, Trash2, Search, X, Eye, Calendar, User, Edit } from 'lucide-react';
@@ -116,6 +117,11 @@ export const AnnouncementsView: React.FC<AnnouncementsViewProps> = ({
         'إنشاء إعلان',
         `${currentUser.name} أنشأ إعلاناً جديداً: ${title.trim()}`
       );
+
+      sendAppNotification(`📢 إعلان جديد: ${title.trim()}`, {
+        body: content.trim().substring(0, 100),
+        tag: `announcement-${newAnnId}`
+      });
 
       showToast('تم نشر الإعلان بنجاح ✓', 'success');
       setShowAddForm(false);

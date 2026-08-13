@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { db, auth, secondaryAuth, formatDate, logActivity } from '../lib/firebase';
+import { sendAppNotification } from '../lib/notifications';
 import { ref, onValue, set, update, remove } from 'firebase/database';
 import { UserProfile, UserRole, UserStatus } from '../types';
 import { Users, PlusCircle, Edit2, Snowflake, Trash2, Shield, X, Mail, KeyRound } from 'lucide-react';
@@ -187,6 +188,11 @@ export const MembersView: React.FC<MembersViewProps> = ({ currentUser, showToast
         `${actionText} عضو`,
         `${currentUser.name} قام بـ ${actionText} حساب العضو: ${m.name}`
       );
+
+      sendAppNotification(`${actionText === 'تجميد' ? '❄️ تجميد' : '✅ فك تجميد'} حساب: ${m.name}`, {
+        body: `تم ${actionText} حساب ${m.name} بنجاح`,
+        tag: `member-status-${m.id}`
+      });
 
       showToast(`تم ${actionText} حساب العضو بنجاح ✓`, 'success');
     } catch (err) {

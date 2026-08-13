@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Snowflake, Send, CheckCircle2, ShieldAlert, LogOut } from 'lucide-react';
 import { ref, set } from 'firebase/database';
 import { db, generateReadableId, auth } from '../lib/firebase';
+import { sendAppNotification } from '../lib/notifications';
 import { signOut } from 'firebase/auth';
 import { UserProfile } from '../types';
 
@@ -30,6 +31,10 @@ export const FrozenOverlay: React.FC<FrozenOverlayProps> = ({ currentUser, showT
       });
 
       setRequested(true);
+      sendAppNotification('❄️ طلب فك تجميد جديد', {
+        body: `قام العضو ${currentUser.name} بتقديم طلب فك تجميد الحساب`,
+        tag: `unfreeze-req-${newReqId}`
+      });
       showToast('تم إرسال طلب فك التجميد إلى الأدمن بنجاح ✓', 'success');
     } catch (err) {
       showToast('حدث خطأ أثناء إرسال الطلب', 'error');
