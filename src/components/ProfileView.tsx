@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { db, auth, formatCurrency, formatDate, logActivity, repairDatabase, RepairResult } from '../lib/firebase';
 import { isNotificationsEnabled, requestNotificationPermission, setNotificationsEnabled, getNotificationPermission } from '../lib/notifications';
 import { ref, onValue, update } from 'firebase/database';
-import { updatePassword, updateEmail } from 'firebase/auth';
+import { updatePassword, updateEmail, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
 import { UserProfile, DistributionFundSlice, ProjectBooklet } from '../types';
 import {
   User,
@@ -50,6 +50,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ currentUser, showToast
   // Form states for account update
   const [newName, setNewName] = useState(currentUser.name || '');
   const [newEmail, setNewEmail] = useState(currentUser.email || '');
+  const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -185,7 +186,30 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ currentUser, showToast
 
     try {
       const user = auth.currentUser;
-      if (!user) throw new Error('المستخدم غير مسجّل دخول');
+      const isEmailChanging = newEmail.trim().toLowerCase() !== (currentUser.email || '').toLowerCase();
+      const isPasswordChanging = newPassword.trim().length > 0;
+
+      if ((isEmailChanging || isPasswordChanging) && !user) {
+        throw new Error('انتهت جلسة أمان الفايربيس. يرجى تسجيل الخروج ثم إعادة تسجيل الدخول لمتابعة تعديل الحساب.');
+      }
+
+      // Re-authenticate if modifying password or email and current user exists
+      if ((isEmailChanging || isPasswordChanging) && user) {
+        if (!currentPassword.trim()) {
+          throw new Error('يرجى كتابة كلمة المرور الحالية');
+        }
+
+        try {
+          const credential = EmailAuthProvider.credential(user.email || currentUser.email, currentPassword.trim());
+          await reauthenticateWithCredential(user, credential);
+        } catch (reauthErr: any) {
+          console.error('Re-authentication failed:', reauthErr);
+          if (reauthErr.code === 'auth/wrong-password' || reauthErr.code === 'auth/invalid-credential') {
+            throw new Error('كلمة المرور الحالية غير صحيحة');
+          }
+          throw new Error('كلمة المرور الحالية غير صحيحة');
+        }
+      }
 
       // Update Name if changed
       if (newName.trim() !== currentUser.name) {
@@ -195,17 +219,17 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ currentUser, showToast
       }
 
       // Update email if changed
-      if (newEmail.trim() !== currentUser.email) {
-        await updateEmail(user, newEmail.trim());
+      if (isEmailChanging && user) {
+        await updateEmail(user, newEmail.trim().toLowerCase());
         await update(ref(db, `users/${currentUser.id}`), {
-          email: newEmail.trim(),
+          email: newEmail.trim().toLowerCase(),
         });
       }
 
       // Update password if provided
-      if (newPassword.trim()) {
-        if (newPassword.length < 6) {
-          throw new Error('كلمة المرور يجب أن تكون 6 أحرف على الأقل');
+      if (isPasswordChanging && user) {
+        if (newPassword.trim().length < 6) {
+          throw new Error('كلمة المرور الجديدة يجب أن تكون 6 أحرف على الأقل');
         }
         if (newPassword !== confirmPassword) {
           throw new Error('كلمة المرور الجديدة وتأكيد كلمة المرور غير متطابقين');
@@ -216,9 +240,14 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ currentUser, showToast
       showToast('تم تحديث بيانات الحساب بنجاح ✓', 'success');
       setNewPassword('');
       setConfirmPassword('');
+      setCurrentPassword('');
     } catch (err: any) {
       console.error('Account update error:', err);
-      showToast(err.message || 'حدث خطأ. حاول مرة أخرى.', 'error');
+      let errMsg = err.message || 'حدث خطأ. حاول مرة أخرى.';
+      if (err.code === 'auth/requires-recent-login') {
+        errMsg = 'يتطلب إجراء هذه العملية إدخال كلمة المرور الحالية لتأكيد الأمان.';
+      }
+      showToast(errMsg, 'error');
     } finally {
       setUpdating(false);
     }
@@ -460,6 +489,30 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ currentUser, showToast
 
           <div>
             <label className="block text-xs font-black text-slate-700 mb-1 uppercase tracking-wider">
+              كلمة المرور الحالية
+            </label>
+            <div className="relative">
+              <KeyRound className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2" />
+              <input
+                type={showPassword ? 'text' : 'password'}
+                placeholder="أدخل كلمة المرور الحالية..."
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                className="w-full pr-9 pl-10 py-2 text-xs font-bold bg-slate-50 border border-slate-300 rounded focus:bg-white focus:border-[#1e293b] focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"
+                title={showPassword ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-black text-slate-700 mb-1 uppercase tracking-wider">
               البريد الإلكتروني
             </label>
             <div className="relative">
@@ -476,7 +529,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ currentUser, showToast
 
           <div>
             <label className="block text-xs font-black text-slate-700 mb-1 uppercase tracking-wider">
-              كلمة المرور الجديدة (اتركها فارغة إذا لم ترد التغيير)
+              كلمة المرور الجديدة
             </label>
             <div className="relative">
               <KeyRound className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2" />

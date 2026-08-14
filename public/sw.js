@@ -1,4 +1,4 @@
-const CACHE_NAME = 'artiatech-portal-v3';
+const CACHE_NAME = 'artiatech-portal-v7';
 const urlsToCache = [
   '/',
   '/index.html',
@@ -7,7 +7,9 @@ const urlsToCache = [
   '/icon-192.png',
   '/icon-512.png',
   '/apple-touch-icon.png',
-  '/favicon.ico'
+  '/favicon.ico',
+  '/screenshot-desktop.png',
+  '/screenshot-mobile.png'
 ];
 
 self.addEventListener('install', (event) => {
@@ -15,9 +17,17 @@ self.addEventListener('install', (event) => {
     caches.open(CACHE_NAME).then(async (cache) => {
       for (const url of urlsToCache) {
         try {
-          await cache.add(url);
+          const response = await fetch(url, { cache: 'no-cache' });
+          if (response.ok) {
+            const contentType = response.headers.get('content-type') || '';
+            const isAsset = url.endsWith('.png') || url.endsWith('.ico') || url.endsWith('.json');
+            if (isAsset && contentType.includes('text/html')) {
+              continue;
+            }
+            await cache.put(url, response);
+          }
         } catch (e) {
-          console.warn('SW cache.add notice for:', url, e);
+          console.warn('SW cache notice:', url, e);
         }
       }
     })
@@ -44,16 +54,22 @@ self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
   if (!event.request.url.startsWith('http')) return;
 
+  const reqUrl = new URL(event.request.url);
+  const isImage = reqUrl.pathname.match(/\.(png|jpg|jpeg|ico|svg|webp)$/i);
+  const isJson = reqUrl.pathname.endsWith('.json');
+
   event.respondWith(
     fetch(event.request)
       .then((response) => {
         if (!response || response.status !== 200) {
           return response;
         }
-        // Avoid caching HTML responses for manifest or static asset requests
         const contentType = response.headers.get('content-type') || '';
-        if (event.request.url.endsWith('.json') && !contentType.includes('json')) {
-          return response;
+        if ((isImage || isJson) && contentType.includes('text/html')) {
+          // If Netlify returned SPA index.html for a missing asset, do NOT cache or serve as image/json
+          return caches.match(event.request).then((cached) => {
+            return cached || new Response('Asset not found', { status: 404, headers: { 'Content-Type': 'text/plain' } });
+          });
         }
         const responseToCache = response.clone();
         caches.open(CACHE_NAME).then((cache) => {
