@@ -1,13 +1,9 @@
 {
+  "id": "/",
   "short_name": "Artiatech",
   "name": "Artiatech Portal",
   "description": "استوديو أرتياتك للأعمال الفنية والتقنية - Artiatech Studio Portal",
   "icons": [
-    {
-      "src": "/icon.png",
-      "type": "image/png",
-      "sizes": "192x192 512x512"
-    },
     {
       "src": "/icon-192.png",
       "type": "image/png",
@@ -19,6 +15,12 @@
       "type": "image/png",
       "sizes": "512x512",
       "purpose": "any maskable"
+    },
+    {
+      "src": "/icon.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any"
     }
   ],
   "start_url": "/",

@@ -1,19 +1,25 @@
-const CACHE_NAME = 'artiatech-portal-v1';
+const CACHE_NAME = 'artiatech-portal-v3';
 const urlsToCache = [
   '/',
   '/index.html',
   '/manifest.json',
   '/icon.png',
-  '/logo.png',
   '/icon-192.png',
   '/icon-512.png',
+  '/apple-touch-icon.png',
   '/favicon.ico'
 ];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(urlsToCache);
+    caches.open(CACHE_NAME).then(async (cache) => {
+      for (const url of urlsToCache) {
+        try {
+          await cache.add(url);
+        } catch (e) {
+          console.warn('SW cache.add notice for:', url, e);
+        }
+      }
     })
   );
   self.skipWaiting();
@@ -35,20 +41,36 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  // Network first, falling back to cache
+  if (event.request.method !== 'GET') return;
+  if (!event.request.url.startsWith('http')) return;
+
   event.respondWith(
     fetch(event.request)
       .then((response) => {
-        if (response && response.status === 200 && response.type === 'basic') {
-          const responseToCache = response.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, responseToCache);
-          });
+        if (!response || response.status !== 200) {
+          return response;
         }
+        // Avoid caching HTML responses for manifest or static asset requests
+        const contentType = response.headers.get('content-type') || '';
+        if (event.request.url.endsWith('.json') && !contentType.includes('json')) {
+          return response;
+        }
+        const responseToCache = response.clone();
+        caches.open(CACHE_NAME).then((cache) => {
+          cache.put(event.request, responseToCache);
+        });
         return response;
       })
       .catch(() => {
-        return caches.match(event.request);
+        return caches.match(event.request).then((cachedResponse) => {
+          if (cachedResponse) {
+            return cachedResponse;
+          }
+          if (event.request.mode === 'navigate') {
+            return caches.match('/index.html');
+          }
+          return new Response('Offline', { status: 503, statusText: 'Service Unavailable' });
+        });
       })
   );
 });
