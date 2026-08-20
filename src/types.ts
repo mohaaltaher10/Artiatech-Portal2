@@ -51,8 +51,15 @@ export interface TreasuryTransaction {
 export interface SliceMember {
   userId: string;
   userName: string;
+  userEmail?: string;
   shares: number;
   balance: number;
+}
+
+export interface DistributionBasePool {
+  balance: number;
+  updatedAt: string;
+  description?: string;
 }
 
 export interface DistributionFundSlice {

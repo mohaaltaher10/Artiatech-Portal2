@@ -61,6 +61,7 @@ const FormattedAnnouncementContent: React.FC<{ content: string }> = ({ content }
 export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, onSelectTab }) => {
   const [locations, setLocations] = useState<TreasuryLocation[]>([]);
   const [slices, setSlices] = useState<DistributionFundSlice[]>([]);
+  const [basePoolBalance, setBasePoolBalance] = useState<number>(0);
   const [booklets, setBooklets] = useState<ProjectBooklet[]>([]);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [plans, setPlans] = useState<PlanItem[]>([]);
@@ -76,12 +77,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, onSel
       setLocations(list);
     }, (err) => console.warn('Treasury locations read notice:', err));
 
-    // 2. Fetch Distribution Slices
+    // 2. Fetch Distribution Slices & Base Pool
     const unsubSlices = onValue(ref(db, 'distribution_fund'), (snapshot) => {
       const val = snapshot.val();
       const list: DistributionFundSlice[] = val ? Object.keys(val).map((k) => ({ id: k, ...val[k] })) : [];
       setSlices(list);
     }, (err) => console.warn('Distribution fund read notice:', err));
+
+    const unsubBasePool = onValue(ref(db, 'distribution_base_pool'), (snapshot) => {
+      const val = snapshot.val();
+      setBasePoolBalance(val?.balance || 0);
+    }, (err) => console.warn('Base pool read notice:', err));
 
     // 3. Fetch Booklets
     const unsubBooklets = onValue(ref(db, 'project_booklets'), (snapshot) => {
@@ -124,6 +130,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, onSel
     return () => {
       unsubTreasury();
       unsubSlices();
+      unsubBasePool();
       unsubBooklets();
       unsubAnn();
       unsubPlans();
@@ -132,7 +139,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, onSel
   }, []);
 
   const totalTreasuryBalance = locations.reduce((sum, loc) => sum + (loc.balance || 0), 0);
-  const totalFundBalance = slices.reduce((sum, sl) => sum + (sl.totalAmount || 0), 0);
+  const totalFundBalance = basePoolBalance + slices.reduce((sum, sl) => sum + (sl.totalAmount || 0), 0);
   const myBookletsCount = booklets.filter((b) =>
     b.teamMembers?.some((m) => m.userId === currentUser.id)
   ).length;

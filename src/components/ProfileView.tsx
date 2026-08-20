@@ -157,10 +157,14 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ currentUser, showToast
     };
   }, [currentUser.id, currentUser.role]);
 
-  // Filter slices where current user is a member
+  // Filter slices where current user is a member (matched by userId, userEmail, or userName)
   const mySlicesData = slices
     .map((slice) => {
-      const mem = slice.members?.find((m) => m.userId === currentUser.id);
+      const mem = slice.members?.find((m) =>
+        (m.userId && m.userId === currentUser.id) ||
+        (currentUser.email && m.userEmail && m.userEmail.toLowerCase() === currentUser.email.toLowerCase()) ||
+        (m.userName && currentUser.name && m.userName.trim().toLowerCase() === currentUser.name.trim().toLowerCase())
+      );
       if (!mem) return null;
       return {
         sliceId: slice.id,
