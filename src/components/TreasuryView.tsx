@@ -36,8 +36,11 @@ import {
   Image,
   ChevronRight,
   ChevronLeft,
-  Copy
+  Copy,
+  BarChart3,
+  UploadCloud
 } from 'lucide-react';
+import { FinancialAnalyticsModal } from './FinancialAnalyticsModal';
 
 interface TreasuryViewProps {
   currentUser: UserProfile;
@@ -49,6 +52,7 @@ export const TreasuryView: React.FC<TreasuryViewProps> = ({ currentUser, showToa
   const [transactions, setTransactions] = useState<TreasuryTransaction[]>([]);
   const [assets, setAssets] = useState<AssetItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isAnalyticsOpen, setIsAnalyticsOpen] = useState(false);
 
   // Filters
   const [filterType, setFilterType] = useState<string>('all');
@@ -93,7 +97,41 @@ export const TreasuryView: React.FC<TreasuryViewProps> = ({ currentUser, showToa
   const [showReportModal, setShowReportModal] = useState(false);
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
   const [imgLoading, setImgLoading] = useState<boolean>(true);
+  const [isUploadingImgBB, setIsUploadingImgBB] = useState(false);
   const [copiedReportText, setCopiedReportText] = useState(false);
+  const IMGBB_API_KEY = 'c25155149b18a15f192bed12f7d3fef6';
+
+  const handleUploadFileToImgBB = async (file: File): Promise<string> => {
+    if (!file) throw new Error('يرجى اختيار ملف صورة صالح');
+    setIsUploadingImgBB(true);
+
+    try {
+      const formData = new FormData();
+      formData.append('image', file);
+
+      const res = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (data && data.success && data.data && (data.data.url || data.data.display_url)) {
+        const finalUrl = data.data.url || data.data.display_url;
+        showToast('تم رفع صورة الإيصال إلى ImgBB بنجاح ✓', 'success');
+        return finalUrl;
+      } else {
+        const errorMsg = data?.error?.message || 'فشل رفع الصورة إلى ImgBB.';
+        showToast(`فشل الرفع إلى ImgBB: ${errorMsg}`, 'error');
+        throw new Error(errorMsg);
+      }
+    } catch (err: any) {
+      console.error('ImgBB Upload Error:', err);
+      showToast(err.message || 'فشل الاتصال بـ ImgBB API', 'error');
+      throw err;
+    } finally {
+      setIsUploadingImgBB(false);
+    }
+  };
 
   // Pagination States
   const [txsPage, setTxsPage] = useState(1);
@@ -732,11 +770,27 @@ export const TreasuryView: React.FC<TreasuryViewProps> = ({ currentUser, showToa
             </button>
 
             <button
+              onClick={() => setActiveForm(activeForm === 'withdrawal' ? null : 'withdrawal')}
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-purple-700 hover:bg-purple-600 text-white font-black text-xs rounded-xl shadow-sm transition-all cursor-pointer"
+            >
+              <ArrowDownRight className="w-4 h-4 text-purple-200" />
+              <span>تسجيل سحب / مسحوبات</span>
+            </button>
+
+            <button
               onClick={() => setActiveForm(activeForm === 'transfer' ? null : 'transfer')}
               className="flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white font-black text-xs rounded-xl shadow-sm transition-all cursor-pointer"
             >
               <ArrowLeftRight className="w-4 h-4" />
               <span>إضافة تحويل</span>
+            </button>
+
+            <button
+              onClick={() => setIsAnalyticsOpen(true)}
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs rounded-xl shadow-sm transition-all cursor-pointer"
+            >
+              <BarChart3 className="w-4 h-4" />
+              <span>التحليلات ورسوم البيانية</span>
             </button>
 
             <button
@@ -1132,8 +1186,8 @@ export const TreasuryView: React.FC<TreasuryViewProps> = ({ currentUser, showToa
           </div>
         </div>
 
-        {/* Inline Form: Income / Expense / Transfer */}
-        {(activeForm === 'income' || activeForm === 'expense' || activeForm === 'transfer') && (
+        {/* Inline Form: Income / Expense / Withdrawal / Transfer */}
+        {(activeForm === 'income' || activeForm === 'expense' || activeForm === 'withdrawal' || activeForm === 'transfer') && (
           <form
             onSubmit={(e) => handleAddTransaction(e, activeForm as TransactionType)}
             className="bg-slate-50 border border-slate-300 p-4 rounded-md space-y-3 no-print"
@@ -1142,6 +1196,7 @@ export const TreasuryView: React.FC<TreasuryViewProps> = ({ currentUser, showToa
               <h3 className="text-xs font-black text-[#0f172a] uppercase tracking-wider">
                 {activeForm === 'income' && 'تسجيل إيراد جديد (+)'}
                 {activeForm === 'expense' && 'تسجيل مصروف جديد (-)'}
+                {activeForm === 'withdrawal' && 'تسجيل سحب / مسحوبات شخصية أو أرباح (-)'}
                 {activeForm === 'transfer' && 'تسجيل تحويل بين الحسابات (⇄)'}
               </h3>
               <button onClick={resetForms} type="button" className="text-slate-400 hover:text-slate-700">
@@ -1237,13 +1292,37 @@ export const TreasuryView: React.FC<TreasuryViewProps> = ({ currentUser, showToa
             </div>
 
             <div>
-              <label className="block text-[11px] font-bold text-slate-700 mb-1 flex items-center gap-1">
-                <Paperclip className="w-3.5 h-3.5 text-slate-500" />
-                المصادر والوثائق (روابط الإيصالات، الفواتير أو صور المستندات)
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-[11px] font-bold text-slate-700 flex items-center gap-1">
+                  <Paperclip className="w-3.5 h-3.5 text-slate-500" />
+                  المصادر والوثائق (روابط الإيصالات، الفواتير أو صور المستندات)
+                </label>
+
+                {/* ImgBB Direct Upload Button */}
+                <label className="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded text-[11px] font-bold cursor-pointer transition-colors shadow-2xs">
+                  <UploadCloud className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>{isUploadingImgBB ? 'جاري الرفع لـ ImgBB...' : 'رفع صورة إيصال إلى ImgBB 📤'}</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    disabled={isUploadingImgBB}
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        try {
+                          const url = await handleUploadFileToImgBB(file);
+                          setTxSources((prev) => (prev ? `${prev}\n${url}` : url));
+                        } catch (err) {}
+                        e.target.value = '';
+                      }
+                    }}
+                  />
+                </label>
+              </div>
               <textarea
                 rows={2}
-                placeholder="ضع كل رابط مستند في سطر مستقل أو افصل بفاصلة (مثال: https://...)"
+                placeholder="ضع كل رابط مستند في سطر مستقل أو استخدم زر رفع الصورة إلى ImgBB أعلاه..."
                 value={txSources}
                 onChange={(e) => setTxSources(e.target.value)}
                 className="w-full p-2 text-xs font-mono font-bold bg-white border border-slate-300 rounded focus:border-[#1e293b] focus:outline-none dir-ltr text-right"
@@ -1283,9 +1362,10 @@ export const TreasuryView: React.FC<TreasuryViewProps> = ({ currentUser, showToa
               className="p-1.5 bg-white border border-slate-300 rounded font-bold text-slate-800"
             >
               <option value="all">كل الأنواع</option>
-              <option value="income">إيراد</option>
-              <option value="expense">مصروف</option>
-              <option value="transfer">تحويل</option>
+              <option value="income">إيراد (+)</option>
+              <option value="expense">مصروف (-)</option>
+              <option value="withdrawal">سحب / مسحوبات (💸)</option>
+              <option value="transfer">تحويل (⇄)</option>
             </select>
 
             {/* Period Filter */}
@@ -1405,6 +1485,11 @@ export const TreasuryView: React.FC<TreasuryViewProps> = ({ currentUser, showToa
                                   مصروف
                                 </span>
                               )}
+                              {tx.type === 'withdrawal' && (
+                                <span className="text-purple-700 font-black">
+                                  سحب 💸
+                                </span>
+                              )}
                               {tx.type === 'transfer' && (
                                 <span className="text-blue-700 font-black">
                                   تحويل
@@ -1485,9 +1570,9 @@ export const TreasuryView: React.FC<TreasuryViewProps> = ({ currentUser, showToa
         )}
       </div>
 
-      {/* Custom Modal Dialog for Adding Source Link */}
+      {/* Custom Modal Dialog for Adding Source Link or Uploading to ImgBB */}
       {addSourceTxId && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 dir-rtl no-print">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 dir-rtl no-print animate-fadeIn">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <h3 className="font-black text-sm text-[#0f172a] flex items-center gap-2">
@@ -1502,21 +1587,53 @@ export const TreasuryView: React.FC<TreasuryViewProps> = ({ currentUser, showToa
               </button>
             </div>
 
-            <div className="space-y-2">
-              <label className="block text-xs font-bold text-slate-700">
-                رابط المستند / الإيصال (صورة، PDF، Google Drive، أو رابط):
-              </label>
-              <input
-                type="url"
-                placeholder="https://..."
-                value={newSourceUrl}
-                onChange={(e) => setNewSourceUrl(e.target.value)}
-                className="w-full p-2.5 text-xs bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:border-[#1e293b] focus:outline-none font-bold"
-                autoFocus
-              />
-              <p className="text-[11px] text-slate-500 font-medium">
-                يمكنك إدخال رابط صورة الإيصال أو ملف PDF أو مستند Google Drive لربطه بالحركة المالية.
-              </p>
+            <div className="space-y-3">
+              {/* Option 1: ImgBB Direct Upload */}
+              <div className="bg-emerald-50/70 p-3 rounded-xl border border-emerald-200 space-y-2">
+                <label className="block text-xs font-black text-emerald-950">
+                  الخيار الأول: رفع صورة الإيصال مباشرة إلى ImgBB 📤
+                </label>
+                <label className="flex items-center justify-center gap-2 p-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs rounded-xl cursor-pointer transition-colors text-center shadow-xs">
+                  <UploadCloud className="w-4 h-4" />
+                  <span>{isUploadingImgBB ? 'جاري رفع الصورة إلى ImgBB...' : 'اختر صورة إيصال من جهازك للرفع الفوري'}</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    disabled={isUploadingImgBB}
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        try {
+                          const url = await handleUploadFileToImgBB(file);
+                          setNewSourceUrl(url);
+                        } catch (err) {}
+                        e.target.value = '';
+                      }
+                    }}
+                  />
+                </label>
+              </div>
+
+              <div className="relative flex py-1 items-center">
+                <div className="flex-grow border-t border-slate-200"></div>
+                <span className="flex-shrink mx-2 text-[10px] font-bold text-slate-400">أو أدخل الرابط المباشر يدويًا</span>
+                <div className="flex-grow border-t border-slate-200"></div>
+              </div>
+
+              {/* Option 2: Direct URL */}
+              <div className="space-y-1">
+                <label className="block text-xs font-bold text-slate-700">
+                  رابط المستند / الإيصال (صورة، PDF، Google Drive):
+                </label>
+                <input
+                  type="url"
+                  placeholder="https://..."
+                  value={newSourceUrl}
+                  onChange={(e) => setNewSourceUrl(e.target.value)}
+                  className="w-full p-2.5 text-xs bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:border-[#1e293b] focus:outline-none font-bold dir-ltr text-left"
+                />
+              </div>
             </div>
 
             <div className="flex items-center justify-end gap-2 pt-2">
@@ -1774,6 +1891,14 @@ export const TreasuryView: React.FC<TreasuryViewProps> = ({ currentUser, showToa
           </div>
         </div>
       )}
+
+      {/* Modal: Financial Analytics */}
+      <FinancialAnalyticsModal
+        isOpen={isAnalyticsOpen}
+        onClose={() => setIsAnalyticsOpen(false)}
+        transactions={transactions}
+        locations={locations}
+      />
     </div>
   );
 };

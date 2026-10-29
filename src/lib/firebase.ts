@@ -1,5 +1,12 @@
 import { initializeApp, getApps } from "firebase/app";
-import { getAuth } from "firebase/auth";
+import { 
+  getAuth, 
+  initializeAuth, 
+  browserLocalPersistence, 
+  browserSessionPersistence, 
+  indexedDBLocalPersistence,
+  inMemoryPersistence 
+} from "firebase/auth";
 import { getDatabase, ref, set, push, get, remove } from "firebase/database";
 
 const firebaseConfig = {
@@ -14,13 +21,43 @@ const firebaseConfig = {
 };
 
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
-export const auth = getAuth(app);
+
+// Initialize primary auth with browserLocalPersistence (localStorage) first to prevent "Database is closing/hidden" IndexedDB errors in iframes/tabs
+export const auth = (() => {
+  try {
+    return initializeAuth(app, {
+      persistence: [browserLocalPersistence, browserSessionPersistence, indexedDBLocalPersistence]
+    });
+  } catch {
+    return getAuth(app);
+  }
+})();
 
 // Secondary Firebase app instance for creating new users without signing out the active Admin session
+// Uses inMemoryPersistence so it never locks or interferes with IndexedDB or local storage
 const secondaryApp = getApps().find(a => a.name === "SecondaryApp") || initializeApp(firebaseConfig, "SecondaryApp");
-export const secondaryAuth = getAuth(secondaryApp);
+export const secondaryAuth = (() => {
+  try {
+    return initializeAuth(secondaryApp, {
+      persistence: inMemoryPersistence
+    });
+  } catch {
+    return getAuth(secondaryApp);
+  }
+})();
 
 export const db = getDatabase(app);
+
+// Global suppression of transient IndexedDB visibility closing errors in iframes/background tabs
+if (typeof window !== "undefined") {
+  window.addEventListener("unhandledrejection", (event) => {
+    const reasonMsg = event?.reason?.message || String(event?.reason || "");
+    if (reasonMsg.includes("Database is closing") || reasonMsg.includes("closing/hidden")) {
+      event.preventDefault();
+      console.warn("Ignored transient Firebase/IndexedDB visibility error:", reasonMsg);
+    }
+  });
+}
 
 // Helper to format currency: e.g. "1,333 د.ل"
 export function formatCurrency(amount: number, currency: string = 'د.ل'): string {
@@ -422,3 +459,52 @@ export async function repairDatabase(): Promise<RepairResult> {
     details: `تم فحص وإصلاح ${fixedCount} سجلاً بنجاح! تم استبدال ${renamedCount} معرفاً بأسماء واضحة، وتصحيح الحقول الناقصة بقيم افتراضية.`
   };
 }
+
+// Backup & Restore Database Functions (Includes users and all nodes)
+export async function exportFullBackup() {
+  const dbRef = ref(db);
+  const snapshot = await get(dbRef);
+  const val = snapshot.exists() ? snapshot.val() : {};
+  
+  const backupObject = {
+    exportedAt: new Date().toISOString(),
+    system: "Artiatech Portal",
+    version: "2.0",
+    data: val
+  };
+  
+  const jsonString = JSON.stringify(backupObject, null, 2);
+  const blob = new Blob([jsonString], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  
+  const dateStr = new Date().toISOString().slice(0, 10);
+  const timeStr = new Date().toTimeString().slice(0, 8).replace(/:/g, "-");
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `artiatech_portal_backup_${dateStr}_${timeStr}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+export async function restoreFullBackup(backupJsonData: any): Promise<{ success: boolean; message: string }> {
+  try {
+    if (!backupJsonData || typeof backupJsonData !== 'object') {
+      return { success: false, message: 'ملف النسخة الاحتياطية غير صالحة' };
+    }
+
+    const dataToRestore = backupJsonData.data || backupJsonData;
+    if (typeof dataToRestore !== 'object' || Array.isArray(dataToRestore)) {
+      return { success: false, message: 'تنسيق محتوى النسخة الاحتياطية غير متوافق' };
+    }
+
+    // Restore root data
+    await set(ref(db), dataToRestore);
+    return { success: true, message: 'تم استرجاع كامل قاعدة البيانات والمستخدمين بنجاح ✓' };
+  } catch (err: any) {
+    console.error('Restore error:', err);
+    return { success: false, message: `فشل استرجاع النسخة الاحتياطية: ${err.message}` };
+  }
+}
+

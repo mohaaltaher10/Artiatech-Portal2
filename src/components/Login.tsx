@@ -54,10 +54,27 @@ export const Login: React.FC<LoginProps> = ({ onSuccess }) => {
 
     const cleanEmail = email.trim().toLowerCase();
 
+    // Helper for sign in with retry on transient DB closing error
+    const executeSignIn = async (retries = 2) => {
+      for (let attempt = 0; attempt <= retries; attempt++) {
+        try {
+          return await signInWithEmailAndPassword(auth, cleanEmail, password);
+        } catch (err: any) {
+          const msg = err?.message || '';
+          if ((msg.includes('closing') || msg.includes('hidden')) && attempt < retries) {
+            await new Promise((r) => setTimeout(r, 350));
+            continue;
+          }
+          throw err;
+        }
+      }
+      return await signInWithEmailAndPassword(auth, cleanEmail, password);
+    };
+
     try {
       let userCred;
       try {
-        userCred = await signInWithEmailAndPassword(auth, cleanEmail, password);
+        userCred = await executeSignIn();
       } catch (authErr: any) {
         // Special auto-setup handling for default admin if account doesn't exist yet in Auth
         if (cleanEmail === 'artiatechstudio@gmail.com' && password === 'mohamed#2007') {

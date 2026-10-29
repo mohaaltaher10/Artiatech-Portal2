@@ -142,6 +142,7 @@ export default function App() {
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         onLogout={handleLogout}
+        showToast={showToast}
       />
 
       {/* Main Content Area */}
