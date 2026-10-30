@@ -46,6 +46,7 @@ export interface TreasuryTransaction {
   description: string;
   sources?: string[];
   createdBy: string;
+  performedBy?: string; // العضو المنفذ الحقيقي للعملية
 }
 
 export interface SliceMember {

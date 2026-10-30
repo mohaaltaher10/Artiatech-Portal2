@@ -220,7 +220,7 @@ export const PlansView: React.FC<PlansViewProps> = ({ currentUser, showToast }) 
     return <div className="py-12 text-center text-slate-500 font-bold">جاري تحميل الخطط وخارطة الطريق...</div>;
   }
 
-  // Kanban Columns Definition
+  // Kanban Columns Definition (Active stages)
   const kanbanColumns: { id: PlanStatus; title: string; badgeColor: string; bgHeader: string; borderCol: string }[] = [
     {
       id: 'planned',
@@ -250,13 +250,6 @@ export const PlansView: React.FC<PlansViewProps> = ({ currentUser, showToast }) 
       bgHeader: 'bg-rose-100/80 border-rose-300 text-rose-950',
       borderCol: 'border-rose-200 bg-rose-50/30',
     },
-    {
-      id: 'completed',
-      title: 'مكتملة (الأرشيف) ✅',
-      badgeColor: 'bg-emerald-100 text-emerald-900',
-      bgHeader: 'bg-emerald-100/80 border-emerald-300 text-emerald-950',
-      borderCol: 'border-emerald-200 bg-emerald-50/30',
-    },
   ];
 
   // Active vs Completed Plans
@@ -270,12 +263,12 @@ export const PlansView: React.FC<PlansViewProps> = ({ currentUser, showToast }) 
         <div>
           <h2 className="text-base font-black text-[#0f172a] flex items-center gap-2">
             <MapPin className="w-5 h-5 text-[#1e293b]" />
-            الخطط وخارطة الطريق (Kanban & Drag-and-Drop)
+            الخطط وخارطة الطريق
           </h2>
           {!isAdmin && (
             <p className="text-xs text-amber-700 font-medium flex items-center gap-1 mt-0.5">
               <Lock className="w-3 h-3" />
-              صلاحيات العرض فقط (سحب وإفلات وتعديل الخطط مقتصر على المشرفين Admins)
+              صلاحيات العرض فقط (تعديل وإدارة الخطط مقتصر على المشرفين Admins)
             </p>
           )}
         </div>
@@ -290,10 +283,10 @@ export const PlansView: React.FC<PlansViewProps> = ({ currentUser, showToast }) 
                   ? 'bg-white text-[#1e293b] shadow-xs'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
-              title="لوحة كانبان بالسحب والإفلات"
+              title="لوحة كانبان"
             >
               <Kanban className="w-3.5 h-3.5 text-amber-600" />
-              <span>لوحة كانبان (سحب وإفلات)</span>
+              <span>لوحة كانبان</span>
             </button>
             <button
               onClick={() => setViewMode('table')}
@@ -418,17 +411,10 @@ export const PlansView: React.FC<PlansViewProps> = ({ currentUser, showToast }) 
         </form>
       )}
 
-      {/* VIEW MODE 1: KANBAN BOARD WITH DRAG & DROP */}
+      {/* VIEW MODE 1: KANBAN BOARD */}
       {viewMode === 'kanban' && (
-        <div className="space-y-3">
-          <p className="text-xs text-slate-500 font-bold flex items-center gap-1.5 bg-amber-50 p-2.5 rounded-xl border border-amber-200">
-            <Kanban className="w-4 h-4 text-amber-600 shrink-0" />
-            <span>
-              💡 <b>ميزة السحب والإفلات:</b> يمكنك سحب أي بطاقة خطة وإفلاتها مباشرة في الأعمود المكتمل أو الجاري أو المؤجل لتحديث حالتها فورياً!
-            </span>
-          </p>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-3.5 items-start overflow-x-auto pb-4">
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3.5 items-start overflow-x-auto pb-4">
             {kanbanColumns.map((col) => {
               const colPlans = plans.filter((p) => p.status === col.id);
 
@@ -460,7 +446,7 @@ export const PlansView: React.FC<PlansViewProps> = ({ currentUser, showToast }) 
                   <div className="flex-1 space-y-2.5 overflow-y-auto max-h-[600px] pr-0.5">
                     {colPlans.length === 0 ? (
                       <div className="h-28 flex items-center justify-center text-center p-3 border-2 border-dashed border-slate-200 rounded-xl text-[11px] text-slate-400 font-bold">
-                        اسحب بطاقة الخطة وأفلتها هنا
+                        لا توجد خطط في هذه المرحلة حالياً
                       </div>
                     ) : (
                       colPlans.map((plan) => (
@@ -546,13 +532,6 @@ export const PlansView: React.FC<PlansViewProps> = ({ currentUser, showToast }) 
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="text-xs font-black text-slate-800">الخطط النشطة في الجدول</h3>
-            <button
-              onClick={() => setShowArchive(!showArchive)}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-black text-xs rounded-lg border border-emerald-200 transition-colors cursor-pointer"
-            >
-              <Archive className="w-3.5 h-3.5 text-emerald-600" />
-              <span>أرشيف الخطط المكتملة ({completedPlans.length})</span>
-            </button>
           </div>
 
           {activePlans.length === 0 ? (
@@ -616,88 +595,101 @@ export const PlansView: React.FC<PlansViewProps> = ({ currentUser, showToast }) 
               </table>
             </div>
           )}
-
-          {/* Archive Table inside Table View */}
-          {showArchive && (
-            <div className="bg-emerald-50/50 border border-emerald-200 rounded-2xl p-4 sm:p-5 space-y-3 animate-fadeIn">
-              <div className="flex items-center justify-between pb-2 border-b border-emerald-200">
-                <h3 className="text-sm font-black text-emerald-950 flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                  <span>أرشيف الخطط والمهام المكتملة</span>
-                </h3>
-                <button
-                  onClick={() => setShowArchive(false)}
-                  className="text-xs text-slate-500 hover:text-slate-800 font-bold cursor-pointer"
-                >
-                  إخفاء الأرشيف ✕
-                </button>
-              </div>
-
-              {completedPlans.length === 0 ? (
-                <p className="text-xs text-emerald-800/70 font-bold py-4 text-center">
-                  لا توجد خطط مكتملة في الأرشيف حالياً
-                </p>
-              ) : (
-                <div className="bg-white border border-emerald-200 rounded-xl overflow-x-auto shadow-2xs">
-                  <table className="w-full text-xs text-right">
-                    <thead>
-                      <tr className="bg-emerald-100/60 text-emerald-900 font-black uppercase tracking-wider border-b border-emerald-200">
-                        <th className="p-3">اسم الخطة</th>
-                        <th className="p-3">الوصف</th>
-                        <th className="p-3">الحالة</th>
-                        <th className="p-3">تاريخ الإنجاز / الموعد</th>
-                        <th className="p-3">المسؤول</th>
-                        {isAdmin && <th className="p-3 text-center">إجراءات</th>}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-emerald-100">
-                      {completedPlans.map((plan) => (
-                        <tr key={plan.id} className="hover:bg-emerald-50/40 transition-colors">
-                          <td className="p-3 font-black text-slate-900 line-through decoration-emerald-500/70">{plan.title}</td>
-                          <td className="p-3 text-slate-600 font-medium max-w-xs truncate">{plan.description || '—'}</td>
-                          <td className="p-3">{getStatusBadge(plan.status)}</td>
-                          <td className="p-3 text-slate-600 font-mono font-bold">{formatDate(plan.deadline)}</td>
-                          <td className="p-3 font-bold text-slate-800">{plan.responsible || 'غير محدد'}</td>
-                          {isAdmin && (
-                            <td className="p-3 text-center">
-                              <div className="flex items-center justify-center gap-2">
-                                <button
-                                  onClick={() => {
-                                    setEditingId(plan.id);
-                                    setTitle(plan.title);
-                                    setDescription(plan.description || '');
-                                    setStatus(plan.status);
-                                    setDeadline(plan.deadline || '');
-                                    setResponsible(plan.responsible || '');
-                                    setShowAddForm(true);
-                                    window.scrollTo({ top: 0, behavior: 'smooth' });
-                                  }}
-                                  className="p-1 text-slate-600 hover:bg-slate-200 rounded cursor-pointer"
-                                  title="تعديل الخطة"
-                                >
-                                  <Edit2 className="w-3.5 h-3.5" />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setDeleteConfirmPlan({ id: plan.id, title: plan.title })}
-                                  className="p-1 text-rose-600 hover:bg-rose-100 rounded cursor-pointer"
-                                  title="حذف الخطة"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                            </td>
-                          )}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          )}
         </div>
       )}
+
+      {/* UNIFIED ARCHIVE SECTION FOR BOTH VIEWS (سجل مكتوب للخطط المكتملة) */}
+      <div className="pt-4 border-t border-slate-200 space-y-3">
+        <div className="flex items-center justify-between">
+          <button
+            onClick={() => setShowArchive(!showArchive)}
+            className="flex items-center gap-2 px-4 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 font-black text-xs rounded-xl border border-emerald-300 transition-all cursor-pointer shadow-2xs"
+          >
+            <Archive className="w-4 h-4 text-emerald-700" />
+            <span>أرشيف الخطط المكتملة (سجل مكتوب) ({completedPlans.length})</span>
+            {showArchive ? <ChevronUp className="w-4 h-4 text-emerald-700" /> : <ChevronDown className="w-4 h-4 text-emerald-700" />}
+          </button>
+        </div>
+
+        {showArchive && (
+          <div className="bg-emerald-50/50 border border-emerald-200 rounded-2xl p-4 sm:p-5 space-y-3 animate-fadeIn">
+            <div className="flex items-center justify-between pb-2 border-b border-emerald-200">
+              <h3 className="text-sm font-black text-emerald-950 flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                <span>سجل أرشيف الخطط المكتملة</span>
+              </h3>
+              <button
+                onClick={() => setShowArchive(false)}
+                className="text-xs text-slate-500 hover:text-slate-800 font-bold cursor-pointer"
+              >
+                إخفاء الأرشيف ✕
+              </button>
+            </div>
+
+            {completedPlans.length === 0 ? (
+              <p className="text-xs text-emerald-800/70 font-bold py-4 text-center">
+                لا توجد خطط مكتملة في الأرشيف حالياً
+              </p>
+            ) : (
+              <div className="bg-white border border-emerald-200 rounded-xl overflow-x-auto shadow-2xs">
+                <table className="w-full text-xs text-right">
+                  <thead>
+                    <tr className="bg-emerald-100/60 text-emerald-900 font-black uppercase tracking-wider border-b border-emerald-200">
+                      <th className="p-3">اسم الخطة</th>
+                      <th className="p-3">الوصف</th>
+                      <th className="p-3">الحالة</th>
+                      <th className="p-3">تاريخ الإنجاز / الموعد</th>
+                      <th className="p-3">المسؤول</th>
+                      {isAdmin && <th className="p-3 text-center">إجراءات</th>}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-emerald-100">
+                    {completedPlans.map((plan) => (
+                      <tr key={plan.id} className="hover:bg-emerald-50/40 transition-colors">
+                        <td className="p-3 font-black text-slate-900 line-through decoration-emerald-500/70">{plan.title}</td>
+                        <td className="p-3 text-slate-600 font-medium max-w-xs truncate">{plan.description || '—'}</td>
+                        <td className="p-3">{getStatusBadge(plan.status)}</td>
+                        <td className="p-3 text-slate-600 font-mono font-bold">{formatDate(plan.deadline)}</td>
+                        <td className="p-3 font-bold text-slate-800">{plan.responsible || 'غير محدد'}</td>
+                        {isAdmin && (
+                          <td className="p-3 text-center">
+                            <div className="flex items-center justify-center gap-2">
+                              <button
+                                onClick={() => {
+                                  setEditingId(plan.id);
+                                  setTitle(plan.title);
+                                  setDescription(plan.description || '');
+                                  setStatus(plan.status);
+                                  setDeadline(plan.deadline || '');
+                                  setResponsible(plan.responsible || '');
+                                  setShowAddForm(true);
+                                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                                }}
+                                className="p-1 text-slate-600 hover:bg-slate-200 rounded cursor-pointer"
+                                title="تعديل الخطة"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setDeleteConfirmPlan({ id: plan.id, title: plan.title })}
+                                className="p-1 text-rose-600 hover:bg-rose-100 rounded cursor-pointer"
+                                title="حذف الخطة"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Delete Confirmation Modal (Admin Only) */}
       {isAdmin && deleteConfirmPlan && (

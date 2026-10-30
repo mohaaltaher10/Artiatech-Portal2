@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { db, formatCurrency, formatDate, logActivity, generateReadableId } from '../lib/firebase';
 import {
   ref,
@@ -38,7 +38,8 @@ import {
   ChevronLeft,
   Copy,
   BarChart3,
-  UploadCloud
+  UploadCloud,
+  UserCheck
 } from 'lucide-react';
 import { FinancialAnalyticsModal } from './FinancialAnalyticsModal';
 
@@ -51,6 +52,7 @@ export const TreasuryView: React.FC<TreasuryViewProps> = ({ currentUser, showToa
   const [locations, setLocations] = useState<TreasuryLocation[]>([]);
   const [transactions, setTransactions] = useState<TreasuryTransaction[]>([]);
   const [assets, setAssets] = useState<AssetItem[]>([]);
+  const [usersList, setUsersList] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAnalyticsOpen, setIsAnalyticsOpen] = useState(false);
 
@@ -64,6 +66,9 @@ export const TreasuryView: React.FC<TreasuryViewProps> = ({ currentUser, showToa
   // Inline Form Visibility states
   const [activeForm, setActiveForm] = useState<'location' | 'income' | 'expense' | 'transfer' | 'asset' | null>(null);
 
+  // Form Section Ref for Auto-Scroll
+  const formSectionRef = useRef<HTMLDivElement>(null);
+
   // Form states: New Storage Location
   const [locName, setLocName] = useState('');
   const [locDesc, setLocDesc] = useState('');
@@ -71,7 +76,7 @@ export const TreasuryView: React.FC<TreasuryViewProps> = ({ currentUser, showToa
   const [locCurrency, setLocCurrency] = useState('د.ل');
   const [locResponsible, setLocResponsible] = useState('');
 
-  // Form states: Transaction (Income / Expense / Transfer)
+  // Form states: Transaction (Income / Expense / Transfer / Withdrawal)
   const [txAmount, setTxAmount] = useState<number>(0);
   const [txLocationId, setTxLocationId] = useState('');
   const [txToLocationId, setTxToLocationId] = useState('');
@@ -79,6 +84,7 @@ export const TreasuryView: React.FC<TreasuryViewProps> = ({ currentUser, showToa
   const [txRecipient, setTxRecipient] = useState('');
   const [txDescription, setTxDescription] = useState('');
   const [txSources, setTxSources] = useState(''); // Links separated by newline or comma
+  const [txPerformedBy, setTxPerformedBy] = useState<string>(currentUser.name);
 
   // Form states: Asset
   const [assetName, setAssetName] = useState('');
@@ -133,6 +139,36 @@ export const TreasuryView: React.FC<TreasuryViewProps> = ({ currentUser, showToa
     }
   };
 
+  const getSourceBadge = (url: string, index: number) => {
+    const isImg = Boolean(url.match(/\.(jpeg|jpg|gif|png|webp|bmp|svg)($|\?)/i) || url.includes('i.ibb.co') || url.includes('imgbb'));
+    if (isImg) {
+      return (
+        <button
+          type="button"
+          onClick={() => {
+            setPreviewImageUrl(url);
+            setImgLoading(true);
+          }}
+          className="text-emerald-700 hover:text-emerald-900 text-[11px] font-bold flex items-center gap-1 transition-colors cursor-pointer"
+        >
+          <Image className="w-3.5 h-3.5" />
+          <span>صورة {index + 1}</span>
+        </button>
+      );
+    }
+    return (
+      <a
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-blue-700 hover:text-blue-900 text-[11px] font-bold flex items-center gap-1 transition-colors"
+      >
+        <Paperclip className="w-3.5 h-3.5" />
+        <span>رابط {index + 1}</span>
+      </a>
+    );
+  };
+
   // Pagination States
   const [txsPage, setTxsPage] = useState(1);
   const txsPerPage = 8;
@@ -165,69 +201,30 @@ export const TreasuryView: React.FC<TreasuryViewProps> = ({ currentUser, showToa
     }
   };
 
-  const getSourceBadge = (url: string, index: number) => {
-    const fullUrl = url.startsWith('http') || url.startsWith('data:') ? url : `https://${url}`;
-    const lower = fullUrl.toLowerCase();
-    const isImage = 
-      lower.match(/\.(jpeg|jpg|gif|png|webp|svg|bmp)($|\?|\/)/) ||
-      lower.includes('imgur') ||
-      lower.includes('googleusercontent') ||
-      lower.includes('img/') ||
-      lower.includes('image') ||
-      lower.includes('photo') ||
-      lower.includes('pic') ||
-      lower.startsWith('data:image');
-    const isDrive = lower.includes('drive.google.com') || lower.includes('docs.google.com');
-    const isPdf = lower.includes('.pdf');
+  const handleDeleteSourceFromTx = async (txId: string, sourceIndex: number) => {
+    const targetTx = transactions.find((t) => t.id === txId);
+    if (!targetTx || !targetTx.sources) return;
 
-    let label = `مستند ${index + 1}`;
-    let icon = <FileText className="w-3 h-3 text-slate-600" />;
-    let badgeStyle = "bg-slate-100 hover:bg-slate-200 text-slate-800 border-slate-300";
+    const updatedSources = targetTx.sources.filter((_, idx) => idx !== sourceIndex);
 
-    if (isImage) {
-      label = `صورة ${index + 1}`;
-      icon = <Image className="w-3 h-3 text-emerald-700" />;
-      badgeStyle = "bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border-emerald-300 cursor-pointer";
-      return (
-        <button
-          type="button"
-          key={index}
-          onClick={() => {
-            setImgLoading(true);
-            setPreviewImageUrl(fullUrl);
-          }}
-          className={`inline-flex items-center gap-1 px-2 py-0.5 font-bold text-[10px] rounded border transition-colors ${badgeStyle}`}
-          title="معاينة الصورة في النافذة المنبثقة"
-        >
-          {icon}
-          <span>{label}</span>
-        </button>
-      );
-    } else if (isDrive) {
-      label = `مستند درايف ${index + 1}`;
-      icon = <FileText className="w-3 h-3 text-blue-700" />;
-      badgeStyle = "bg-blue-50 hover:bg-blue-100 text-blue-900 border-blue-300";
-    } else if (isPdf) {
-      label = `ملف PDF ${index + 1}`;
-      icon = <FileText className="w-3 h-3 text-rose-700" />;
-      badgeStyle = "bg-rose-50 hover:bg-rose-100 text-rose-900 border-rose-300";
+    try {
+      await update(ref(db, `treasury_transactions/${txId}`), {
+        sources: updatedSources,
+      });
+      showToast('تم حذف المرفق من السجل بنجاح ✓', 'success');
+    } catch (err) {
+      showToast('حدث خطأ أثناء حذف المرفق', 'error');
     }
-
-    return (
-      <a
-        key={index}
-        href={fullUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        className={`inline-flex items-center gap-1 px-2 py-0.5 font-bold text-[10px] rounded border transition-colors ${badgeStyle}`}
-        title="فتح المستند في رابط خارجي"
-      >
-        {icon}
-        <span>{label}</span>
-        <ExternalLink className="w-2.5 h-2.5 opacity-60" />
-      </a>
-    );
   };
+
+  // Auto-scroll down smoothly to form section when an active form is opened
+  useEffect(() => {
+    if (activeForm && formSectionRef.current) {
+      setTimeout(() => {
+        formSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 100);
+    }
+  }, [activeForm]);
 
   useEffect(() => {
     // 1. Listen to Treasury Locations
@@ -256,10 +253,18 @@ export const TreasuryView: React.FC<TreasuryViewProps> = ({ currentUser, showToa
       setLoading(false);
     });
 
+    // 4. Listen to Users for Member Datalist
+    const unsubUsers = onValue(ref(db, 'users'), (snapshot) => {
+      const val = snapshot.val();
+      const list: UserProfile[] = val ? Object.keys(val).map((k) => ({ id: k, ...val[k] })) : [];
+      setUsersList(list);
+    }, (err) => console.warn('Users listener notice:', err));
+
     return () => {
       unsubLocs();
       unsubTxs();
       unsubAssets();
+      unsubUsers();
     };
   }, []);
 
@@ -477,6 +482,7 @@ export const TreasuryView: React.FC<TreasuryViewProps> = ({ currentUser, showToa
     setTxRecipient('');
     setTxDescription('');
     setTxSources('');
+    setTxPerformedBy(currentUser.name);
 
     setAssetName('');
     setAssetCategory('معدات وأجهزة');
@@ -519,6 +525,35 @@ export const TreasuryView: React.FC<TreasuryViewProps> = ({ currentUser, showToa
       showToast('حدث خطأ. حاول مرة أخرى.', 'error');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleDeleteLocation = async (locId: string, locName: string) => {
+    if (currentUser.role !== 'admin') {
+      showToast('عفواً، يتطلب حذف الخزائن صلاحيات المشرف (Admin)', 'error');
+      return;
+    }
+    const targetLoc = locations.find((l) => l.id === locId);
+    if (!targetLoc) return;
+
+    const confirmMsg = targetLoc.balance !== 0
+      ? `تنبيه: تحتوي الخزانة "${locName}" على رصيد قائم (${formatCurrency(targetLoc.balance, targetLoc.currency)}).\nهل أنت تأكيد من رغبتك في حذف هذه الخزانة نهائياً؟`
+      : `هل أنت تأكيد من رغبتك في حذف الخزانة "${locName}"؟`;
+
+    if (!window.confirm(confirmMsg)) return;
+
+    try {
+      await remove(ref(db, `treasury_locations/${locId}`));
+      await logActivity(
+        currentUser.id,
+        currentUser.name,
+        currentUser.role,
+        'حذف خزانة',
+        `${currentUser.name} حذف الخزانة: ${locName}`
+      );
+      showToast('تم حذف الخزانة بنجاح ✓', 'success');
+    } catch (err) {
+      showToast('حدث خطأ أثناء حذف الخزانة', 'error');
     }
   };
 
@@ -587,6 +622,8 @@ export const TreasuryView: React.FC<TreasuryViewProps> = ({ currentUser, showToa
         .map((s) => s.trim())
         .filter((s) => s.length > 0);
 
+      const actualDoer = txPerformedBy.trim() || currentUser.name;
+
       // Save Transaction Record
       const dateStr = new Date().toISOString().replace('T', ' ').substring(0, 16);
       const newTxId = generateReadableId('tx', txDescription);
@@ -603,17 +640,18 @@ export const TreasuryView: React.FC<TreasuryViewProps> = ({ currentUser, showToa
         recipient: txRecipient.trim(),
         description: txDescription.trim(),
         sources: parsedSources,
-        createdBy: currentUser.name
+        createdBy: currentUser.name,
+        performedBy: actualDoer
       });
 
       // Phrased Natural Arabic Activity Log
       let logMsg = '';
       if (type === 'income') {
-        logMsg = `${currentUser.name} أضاف إيراداً بقيمة ${txAmount} د.ل إلى ${sourceLoc?.name} - ${txDescription}`;
+        logMsg = `${currentUser.name} سجل إيراداً بقيمة ${txAmount} د.ل إلى ${sourceLoc?.name} (بواسطة: ${actualDoer}) - ${txDescription}`;
       } else if (type === 'expense') {
-        logMsg = `${currentUser.name} سجل مصروفا بقيمة ${txAmount} د.ل من ${sourceLoc?.name} - ${txDescription}`;
+        logMsg = `${currentUser.name} سجل مصروفا بقيمة ${txAmount} د.ل من ${sourceLoc?.name} (بواسطة: ${actualDoer}) - ${txDescription}`;
       } else {
-        logMsg = `${currentUser.name} قام بتحويل مبلغ ${txAmount} د.ل من ${sourceLoc?.name} إلى ${destLoc?.name}`;
+        logMsg = `${currentUser.name} قام بتحويل مبلغ ${txAmount} د.ل من ${sourceLoc?.name} إلى ${destLoc?.name} (بواسطة: ${actualDoer})`;
       }
 
       await logActivity(
@@ -770,14 +808,6 @@ export const TreasuryView: React.FC<TreasuryViewProps> = ({ currentUser, showToa
             </button>
 
             <button
-              onClick={() => setActiveForm(activeForm === 'withdrawal' ? null : 'withdrawal')}
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-purple-700 hover:bg-purple-600 text-white font-black text-xs rounded-xl shadow-sm transition-all cursor-pointer"
-            >
-              <ArrowDownRight className="w-4 h-4 text-purple-200" />
-              <span>تسجيل سحب / مسحوبات</span>
-            </button>
-
-            <button
               onClick={() => setActiveForm(activeForm === 'transfer' ? null : 'transfer')}
               className="flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white font-black text-xs rounded-xl shadow-sm transition-all cursor-pointer"
             >
@@ -868,7 +898,7 @@ export const TreasuryView: React.FC<TreasuryViewProps> = ({ currentUser, showToa
 
         {/* Inline Form: Add Storage Location */}
         {activeForm === 'location' && (
-          <form onSubmit={handleAddLocation} className="bg-slate-50 border border-slate-300 p-4 rounded-md space-y-3">
+          <form ref={formSectionRef} onSubmit={handleAddLocation} className="bg-slate-50 border border-slate-300 p-4 rounded-md space-y-3">
             <h3 className="text-xs font-black text-[#0f172a] uppercase tracking-wider">إضافة حساب/خزينة جديدة</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
               <div>
@@ -958,9 +988,21 @@ export const TreasuryView: React.FC<TreasuryViewProps> = ({ currentUser, showToa
               <div key={loc.id} className="p-3.5 bg-slate-50 border border-slate-200 rounded-md space-y-1.5">
                 <div className="flex items-center justify-between">
                   <span className="font-black text-[#0f172a] text-sm">{loc.name}</span>
-                  <span className="text-[10px] px-2 py-0.5 bg-slate-200 text-slate-800 font-bold rounded">
-                    {loc.currency || 'د.ل'}
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] px-2 py-0.5 bg-slate-200 text-slate-800 font-bold rounded">
+                      {loc.currency || 'د.ل'}
+                    </span>
+                    {currentUser.role === 'admin' && (
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteLocation(loc.id, loc.name)}
+                        className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-100 rounded transition-colors cursor-pointer"
+                        title="حذف الخزانة"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <div className="text-lg font-black text-[#1e293b] dir-ltr text-right">
                   {formatCurrency(loc.balance || 0, loc.currency)}
@@ -1001,7 +1043,7 @@ export const TreasuryView: React.FC<TreasuryViewProps> = ({ currentUser, showToa
 
         {/* Inline Form: Add/Edit Asset */}
         {activeForm === 'asset' && (
-          <form onSubmit={handleSaveAsset} className="bg-slate-50 border border-slate-300 p-4 rounded-md space-y-3">
+          <form ref={formSectionRef} onSubmit={handleSaveAsset} className="bg-slate-50 border border-slate-300 p-4 rounded-md space-y-3">
             <h3 className="text-xs font-black text-[#0f172a] uppercase tracking-wider">
               {editingAssetId ? 'تعديل بيانات الأصل' : 'إضافة أصل جديد'}
             </h3>
@@ -1186,17 +1228,17 @@ export const TreasuryView: React.FC<TreasuryViewProps> = ({ currentUser, showToa
           </div>
         </div>
 
-        {/* Inline Form: Income / Expense / Withdrawal / Transfer */}
-        {(activeForm === 'income' || activeForm === 'expense' || activeForm === 'withdrawal' || activeForm === 'transfer') && (
+        {/* Inline Form: Income / Expense / Transfer */}
+        {(activeForm === 'income' || activeForm === 'expense' || activeForm === 'transfer') && (
           <form
+            ref={formSectionRef}
             onSubmit={(e) => handleAddTransaction(e, activeForm as TransactionType)}
-            className="bg-slate-50 border border-slate-300 p-4 rounded-md space-y-3 no-print"
+            className="bg-slate-50 border border-slate-300 p-4 rounded-md space-y-3 no-print shadow-sm animate-fadeIn"
           >
             <div className="flex items-center justify-between pb-2 border-b border-slate-200">
               <h3 className="text-xs font-black text-[#0f172a] uppercase tracking-wider">
                 {activeForm === 'income' && 'تسجيل إيراد جديد (+)'}
                 {activeForm === 'expense' && 'تسجيل مصروف جديد (-)'}
-                {activeForm === 'withdrawal' && 'تسجيل سحب / مسحوبات شخصية أو أرباح (-)'}
                 {activeForm === 'transfer' && 'تسجيل تحويل بين الحسابات (⇄)'}
               </h3>
               <button onClick={resetForms} type="button" className="text-slate-400 hover:text-slate-700">
@@ -1255,6 +1297,30 @@ export const TreasuryView: React.FC<TreasuryViewProps> = ({ currentUser, showToa
                   </select>
                 </div>
               )}
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1 flex items-center justify-between">
+                  <span>تمت المعاملة بواسطة:</span>
+                  <span className="text-[10px] text-emerald-700 font-bold flex items-center gap-0.5">
+                    <UserCheck className="w-3 h-3 text-emerald-600" /> المنفذ الحقيقي
+                  </span>
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    list="tx-users-list"
+                    placeholder="اسم العضو المنفذ للعملية"
+                    value={txPerformedBy}
+                    onChange={(e) => setTxPerformedBy(e.target.value)}
+                    className="w-full p-2 text-xs font-bold bg-white border border-slate-300 rounded focus:border-[#1e293b] focus:outline-none"
+                  />
+                  <datalist id="tx-users-list">
+                    {usersList.map((u) => (
+                      <option key={u.id} value={u.name} />
+                    ))}
+                  </datalist>
+                </div>
+              </div>
 
               <div>
                 <label className="block text-[11px] font-bold text-slate-700 mb-1">الفئة / التصنيف</label>
@@ -1516,7 +1582,21 @@ export const TreasuryView: React.FC<TreasuryViewProps> = ({ currentUser, showToa
                             <td className="p-2">
                               <div className="flex items-center gap-1.5 flex-wrap">
                                 {tx.sources && tx.sources.length > 0 ? (
-                                  tx.sources.map((url, idx) => getSourceBadge(url, idx))
+                                  tx.sources.map((url, idx) => (
+                                    <div key={idx} className="inline-flex items-center gap-0.5 border border-slate-200 rounded px-1 bg-slate-50 shadow-2xs">
+                                      {getSourceBadge(url, idx)}
+                                      {currentUser.role === 'admin' && (
+                                        <button
+                                          type="button"
+                                          onClick={() => handleDeleteSourceFromTx(tx.id, idx)}
+                                          className="p-0.5 text-slate-400 hover:text-rose-600 hover:bg-rose-100 rounded transition-colors cursor-pointer"
+                                          title="حذف هذا المرفق"
+                                        >
+                                          <X className="w-3 h-3" />
+                                        </button>
+                                      )}
+                                    </div>
+                                  ))
                                 ) : currentUser.role !== 'admin' ? (
                                   <span className="text-slate-400 font-normal text-[11px]">(لا مصادر)</span>
                                 ) : null}
@@ -1532,7 +1612,16 @@ export const TreasuryView: React.FC<TreasuryViewProps> = ({ currentUser, showToa
                                 )}
                               </div>
                             </td>
-                            <td className="p-2 text-slate-600 font-bold">{tx.createdBy}</td>
+                            <td className="p-2 text-slate-600 font-bold">
+                              {tx.performedBy && tx.performedBy !== tx.createdBy ? (
+                                <div>
+                                  <span className="text-slate-900 font-black block text-xs">{tx.performedBy}</span>
+                                  <span className="text-[10px] text-slate-400 font-medium block">تسجيل: {tx.createdBy}</span>
+                                </div>
+                              ) : (
+                                <span>{tx.createdBy}</span>
+                              )}
+                            </td>
                           </tr>
                         ))}
                       </tbody>

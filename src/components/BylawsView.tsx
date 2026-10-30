@@ -10,7 +10,8 @@ import {
   ExternalLink,
   Edit2,
   X,
-  FileText
+  FileText,
+  UploadCloud
 } from 'lucide-react';
 
 export interface BylawArticle {
@@ -223,6 +224,40 @@ export const BylawsView: React.FC<BylawsViewProps> = ({ currentUser, showToast }
   const [showSignedModal, setShowSignedModal] = useState<boolean>(false);
   const [showEditSignedUrlModal, setShowEditSignedUrlModal] = useState<boolean>(false);
   const [inputSignedUrl, setInputSignedUrl] = useState<string>('');
+  const [isUploadingImgBB, setIsUploadingImgBB] = useState(false);
+
+  const IMGBB_API_KEY = 'c25155149b18a15f192bed12f7d3fef6';
+
+  const handleUploadFileToImgBB = async (file: File) => {
+    if (!file) return;
+    setIsUploadingImgBB(true);
+
+    try {
+      const formData = new FormData();
+      formData.append('image', file);
+
+      const res = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (data && data.success && data.data && (data.data.url || data.data.display_url)) {
+        const finalUrl = data.data.url || data.data.display_url;
+        setInputSignedUrl(finalUrl);
+        await set(ref(db, 'bylaws_signed_image_url'), finalUrl);
+        if (showToast) showToast('تم رفع صورة التوثيقات وتحديثها على ImgBB بنجاح ✓', 'success');
+        setShowEditSignedUrlModal(false);
+      } else {
+        const errorMsg = data?.error?.message || 'فشل رفع الصورة إلى ImgBB.';
+        if (showToast) showToast(`فشل الرفع: ${errorMsg}`, 'error');
+      }
+    } catch (err: any) {
+      if (showToast) showToast('فشل الاتصال بـ ImgBB API', 'error');
+    } finally {
+      setIsUploadingImgBB(false);
+    }
+  };
 
   useEffect(() => {
     // Listen to signed bylaws image URL in RTDB
@@ -442,16 +477,46 @@ export const BylawsView: React.FC<BylawsViewProps> = ({ currentUser, showToast }
               </button>
             </div>
 
-            <div className="space-y-2">
-              <label className="block text-xs font-bold text-slate-700">رابط صورة مستند التوثيقات والتوقيعات</label>
-              <input
-                type="text"
-                required
-                placeholder="https://... أدخل رابط الصورة المباشر"
-                value={inputSignedUrl}
-                onChange={(e) => setInputSignedUrl(e.target.value)}
-                className="w-full p-2.5 text-xs font-bold bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:border-slate-800 focus:outline-none dir-ltr"
-              />
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">رفع صورة مستند جديدة إلى ImgBB مباشرة</label>
+                <div className="flex items-center gap-2">
+                  <label className="flex-1 border-2 border-dashed border-amber-300 hover:border-amber-500 bg-amber-50/50 hover:bg-amber-50 p-3 rounded-xl flex items-center justify-center gap-2 cursor-pointer transition-colors">
+                    <UploadCloud className="w-5 h-5 text-amber-600" />
+                    <span className="text-xs font-bold text-amber-900">
+                      {isUploadingImgBB ? 'جاري رفع الصورة إلى ImgBB...' : 'اختر ملف الصورة من جهازك للرفع التلقائي'}
+                    </span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      disabled={isUploadingImgBB}
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleUploadFileToImgBB(file);
+                      }}
+                    />
+                  </label>
+                </div>
+              </div>
+
+              <div className="relative flex py-1 items-center">
+                <div className="flex-grow border-t border-slate-200"></div>
+                <span className="flex-shrink mx-2 text-[10px] font-bold text-slate-400">أو أدخل الرابط المباشر يدويًا</span>
+                <div className="flex-grow border-t border-slate-200"></div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">رابط صورة المستند المباشر</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="https://... أدخل رابط الصورة المباشر"
+                  value={inputSignedUrl}
+                  onChange={(e) => setInputSignedUrl(e.target.value)}
+                  className="w-full p-2.5 text-xs font-bold bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:border-slate-800 focus:outline-none dir-ltr"
+                />
+              </div>
             </div>
 
             <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-200 text-xs font-bold">

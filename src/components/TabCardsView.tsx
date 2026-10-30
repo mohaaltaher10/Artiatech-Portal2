@@ -15,7 +15,8 @@ import {
   Building2,
   Sparkles,
   ShieldCheck,
-  ScrollText
+  ScrollText,
+  CreditCard
 } from 'lucide-react';
 import { TabType, UserProfile } from '../types';
 import { motion } from 'motion/react';
